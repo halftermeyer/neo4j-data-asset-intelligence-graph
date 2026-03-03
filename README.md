@@ -71,7 +71,9 @@ neo4j-data-asset-intelligence/
 │   ├── 02_roi_scoring.cypher       ← Angle 2: dataset ROI attribution
 │   └── 03_renewal_decisions.cypher ← Angle 3: procurement & renewal intelligence
 ├── bloom/
-│   └── BLOOM_GUIDE.md              ← Search phrases & scene actions for Neo4j Bloom
+│   ├── BLOOM_GUIDE.md              ← Perspective config, search phrases & scene actions
+│   ├── BLOOM_DEMO_FLOW.md          ← Step-by-step demo script for Bloom
+│   └── data asset intel perspective.json  ← Importable Bloom perspective file
 └── agent/
     └── AGENT_PROMPTS.md            ← Aura Agent system prompt & example interactions
 ```
@@ -90,7 +92,7 @@ neo4j-data-asset-intelligence/
 2. Open `data/seed.ipynb` in Jupyter
 3. Set your AuraDB connection credentials in the first cell
 4. Run all cells to load the synthetic dataset
-5. Open Bloom and import the perspective from `bloom/BLOOM_GUIDE.md`
+5. Open Bloom and import `bloom/data asset intel perspective.json` — then follow `bloom/BLOOM_DEMO_FLOW.md`
 6. Run the Cypher queries in `queries/` from the Aura Console or Neo4j Browser
 
 ---

@@ -1,152 +1,124 @@
-# Bloom Guide — Search Phrases & Scene Actions
+# Bloom Guide — Data Asset Intelligence Graph
 
-This guide defines the **search phrases** and **scene actions** to configure in Neo4j Bloom for the Data Asset Intelligence Graph demo.
-
-Each entry includes:
-- The phrase or action label
-- What it does
-- The Cypher it runs
+This guide documents the **perspective**, **scene actions**, and **search phrase templates** configured in Neo4j Bloom for the Data Asset Intelligence Graph demo.
 
 ---
 
-## Search Phrases
+## Perspective
 
-Search phrases allow users to type natural language into the Bloom search bar and get a pre-built graph visualisation back instantly.
+File: `bloom/data asset intel perspective.json`
+Import it via **Bloom → Perspectives → Import**.
 
 ---
 
-### 🔍 Show full lineage of [Dataset]
+## Node Styling
 
-**Purpose:** Visualise the complete dependency chain from a dataset to its downstream strategies.
+| Label | Color | Caption | Key properties in tooltip |
+|---|---|---|---|
+| Dataset | #FFE081 (yellow) | `name` | `category`, `annual_license_cost`, `mnpi_risk_score`, `signal_half_life_days`, `active` |
+| DataVendor | #C990C0 (purple) | `name` | `tier`, `hq_country`, `category` |
+| Feature | #F79767 (orange) | `name` | `factor_type`, `coverage_universe`, `lookback_days`, `is_proprietary` |
+| FeaturePipeline | #57C7E3 (cyan) | `name` | `team_owner`, `language`, `compute_cost_annual` |
+| Model | #F16667 (red) | `name` | `model_type`, `live_sharpe`, `backtest_sharpe`, `status` |
+| Strategy | #8DCC93 (green) | `name` | `approach`, `aum_usd_m`, `asset_class`, `target_sharpe` |
+| PnL | #D9C8AE (beige) | `period` | `net_pnl_usd_m`, `sharpe`, `max_drawdown_pct` |
+
+---
+
+## Relationship Properties
+
+| Relationship | Properties shown |
+|---|---|
+| PROVIDES | `renewal_date`, `annual_fee_usd`, `auto_renew`, `notice_period_days`, `contract_start`, `exclusivity` |
+| USED_IN | `shapley_value`, `importance_rank`, `in_production` |
+| POWERS | `signal_weight`, `since_year` |
+| FEEDS | `primary_input` |
+| GENERATES | `transformation` |
+| SUBSTITUTABLE_FOR | `overlap_score`, `cost_delta_usd` |
+| CORRELATED_WITH | `r_squared`, `detected_date` |
+| PRODUCES | — |
+
+> **Tip:** For PROVIDES and SUBSTITUTABLE_FOR, use Bloom's built-in **Expand** rather than scene actions — the relationship properties are rich enough on their own.
+
+---
+
+## Search Phrase Templates
+
+Search phrases are typed in the Bloom search bar and return a graph visualisation. Parameters prompt the user for a value.
+
+---
+
+### 1. `Renewals before $date`
+
+**Story:** "What contracts do I need to decide on before a given date?"
+
+**Parameter:** `$date` — String (type a date, e.g. `2025-06-01`)
+
+> **Autocompletion query** to add on `$date`:
+> ```cypher
+> MATCH ()-[prov:PROVIDES]->()
+> WITH DISTINCT prov.renewal_date AS date
+> ORDER BY date
+> RETURN date
+> ```
 
 **Cypher:**
 ```cypher
-MATCH path = (d:Dataset)
-             -[:FEEDS]->(fp:FeaturePipeline)
-             -[:GENERATES]->(f:Feature)
-             -[:USED_IN]->(m:Model)
-             -[:POWERS]->(s:Strategy)
-WHERE d.name CONTAINS $Dataset
+MATCH path = (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+WHERE date(prov.renewal_date) <= date($date)
+  AND date(prov.renewal_date) >= date('2025-01-01')
 RETURN path
 ```
 
-**Parameter:** `$Dataset` → user types dataset name
-
 ---
 
-### 🔍 Show datasets expiring soon
+### 2. `Datasets with MNPI risk above $score`
 
-**Purpose:** Surface all datasets whose contracts are within 90 days of renewal.
+**Story:** Compliance review — surfaces high-risk datasets feeding live models.
+
+**Parameter:** `$score` — Float, autocompletes from `Dataset.mnpi_risk_score`
 
 **Cypher:**
 ```cypher
-MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
-WHERE date(prov.renewal_date) <= date() + duration('P90D')
-  AND date(prov.renewal_date) >= date()
-RETURN v, prov, d
-```
-
----
-
-### 🔍 Show impact of losing [Dataset]
-
-**Purpose:** Show all models and strategies that would be affected if a dataset were removed.
-
-**Cypher:**
-```cypher
-MATCH path = (d:Dataset)
-             -[:FEEDS*1..3]->(f:Feature)
+MATCH path = (:DataVendor)-[:PROVIDES]->(d:Dataset)
+             -[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
              -[:USED_IN]->(m:Model)
-             -[:POWERS]->(s:Strategy)
-WHERE d.name CONTAINS $Dataset
+WHERE d.mnpi_risk_score >= toFloat($score)
+  AND m.status = 'Live'
 RETURN path
 ```
 
-**Parameter:** `$Dataset` → user types dataset name
+---
+
+### 3. `Live models with Sharpe below $threshold`
+
+**Story:** Flags underperforming models — leads naturally into dataset attribution questions.
+
+**Parameter:** `$threshold` — Float, autocompletes from `Model.live_sharpe`
+
+**Cypher:**
+```cypher
+MATCH path = (:Dataset)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(m:Model)
+WHERE m.status = 'Live'
+  AND m.live_sharpe < toFloat($threshold)
+RETURN path
+```
 
 ---
 
-### 🔍 Show all datasets from [Vendor]
+### 4. `Datasets costing more than $budget USD`
 
-**Purpose:** Show the full data portfolio of a specific vendor and what it connects to.
+**Story:** Entry point for the ROI/procurement story — shows expensive datasets and their vendor.
+
+**Parameter:** `$budget` — String (Bloom passes as string, `toInteger()` handles conversion)
 
 **Cypher:**
 ```cypher
 MATCH path = (v:DataVendor)-[:PROVIDES]->(d:Dataset)
-             -[:FEEDS]->(fp:FeaturePipeline)
-WHERE v.name CONTAINS $Vendor
-RETURN path
-```
-
-**Parameter:** `$Vendor` → user types vendor name
-
----
-
-### 🔍 Show strategy [Strategy] dependencies
-
-**Purpose:** Show everything feeding into a given strategy — models, features, pipelines, datasets.
-
-**Cypher:**
-```cypher
-MATCH path = (d:Dataset)
-             -[:FEEDS]->(:FeaturePipeline)
-             -[:GENERATES]->(:Feature)
-             -[:USED_IN]->(:Model)
-             -[:POWERS]->(s:Strategy)
-WHERE s.name CONTAINS $Strategy
-RETURN path
-```
-
-**Parameter:** `$Strategy` → user types strategy name
-
----
-
-### 🔍 Show substitutable datasets
-
-**Purpose:** Reveal the substitution map — which datasets could replace others.
-
-**Cypher:**
-```cypher
-MATCH path = (d1:Dataset)-[r:SUBSTITUTABLE_FOR]->(d2:Dataset)
-RETURN path
-```
-
----
-
-### 🔍 Show correlated features
-
-**Purpose:** Surface redundant features with high R² correlation.
-
-**Cypher:**
-```cypher
-MATCH path = (f1:Feature)-[r:CORRELATED_WITH]->(f2:Feature)
-WHERE r.r_squared >= 0.45
-RETURN path
-```
-
----
-
-### 🔍 Show live models
-
-**Purpose:** Show all models currently in production and the strategies they power.
-
-**Cypher:**
-```cypher
-MATCH path = (m:Model {status: 'Live'})-[:POWERS]->(s:Strategy)
-RETURN path
-```
-
----
-
-### 🔍 Show high MNPI risk datasets
-
-**Purpose:** Surface datasets flagged for high regulatory risk exposure.
-
-**Cypher:**
-```cypher
-MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
-WHERE d.mnpi_risk_score >= 0.5
-MATCH path = (d)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(:Feature)-[:USED_IN]->(m:Model)
+WHERE (d.annual_license_cost + d.ingestion_cost) >= toInteger($budget)
 RETURN path
 ```
 
@@ -154,154 +126,128 @@ RETURN path
 
 ## Scene Actions
 
-Scene actions appear as right-click context menus on nodes in Bloom. They let users drill into a selected node dynamically.
+Scene actions appear in the right-click context menu on a node. They dynamically expand the graph from the selected node.
+
+> All use `UNWIND $nodes AS eid` + `elementId(n) = eid` — the correct Bloom pattern for multi-node selection.
 
 ---
 
-### ▶ Expand downstream from this Dataset
+### On Dataset
 
-**Trigger node:** `Dataset`
+#### `Full path from dataset to PnL`
+Complete lineage from raw data to performance — the "money shot" of the demo.
 
-**Purpose:** When a user right-clicks a Dataset node, expand everything it feeds into.
-
-**Cypher:**
 ```cypher
-MATCH path = (d:Dataset {id: $id})
-             -[:FEEDS]->(fp:FeaturePipeline)
-             -[:GENERATES]->(f:Feature)
-             -[:USED_IN]->(m:Model)
-RETURN path
-```
-
----
-
-### ▶ Show contract details for this Dataset
-
-**Trigger node:** `Dataset`
-
-**Purpose:** Show the vendor and contract relationship properties for the selected dataset.
-
-**Cypher:**
-```cypher
-MATCH path = (v:DataVendor)-[prov:PROVIDES]->(d:Dataset {id: $id})
-RETURN path
-```
-
----
-
-### ▶ Show substitutes for this Dataset
-
-**Trigger node:** `Dataset`
-
-**Purpose:** Show what datasets could replace the selected one.
-
-**Cypher:**
-```cypher
-MATCH path = (d:Dataset {id: $id})-[r:SUBSTITUTABLE_FOR]->(alt:Dataset)
-RETURN path
-```
-
----
-
-### ▶ Show all features used in this Model
-
-**Trigger node:** `Model`
-
-**Purpose:** Expand the feature inputs to the selected model, with Shapley values.
-
-**Cypher:**
-```cypher
-MATCH path = (f:Feature)-[r:USED_IN]->(m:Model {id: $id})
-RETURN path
-```
-
----
-
-### ▶ Trace full data supply chain for this Model
-
-**Trigger node:** `Model`
-
-**Purpose:** Show every upstream dataset feeding into the selected model.
-
-**Cypher:**
-```cypher
-MATCH path = (d:Dataset)
-             -[:FEEDS]->(:FeaturePipeline)
-             -[:GENERATES]->(f:Feature)
-             -[:USED_IN]->(m:Model {id: $id})
-RETURN path
-```
-
----
-
-### ▶ Show PnL history for this Strategy
-
-**Trigger node:** `Strategy`
-
-**Purpose:** Expand all PnL records for the selected strategy.
-
-**Cypher:**
-```cypher
-MATCH path = (s:Strategy {id: $id})-[:PRODUCES]->(p:PnL)
-RETURN path
-```
-
----
-
-### ▶ Show all datasets powering this Strategy
-
-**Trigger node:** `Strategy`
-
-**Purpose:** Full reverse traversal from Strategy back to raw data inputs.
-
-**Cypher:**
-```cypher
-MATCH path = (d:Dataset)
-             -[:FEEDS]->(:FeaturePipeline)
+UNWIND $nodes AS eid
+MATCH path = (ds:Dataset WHERE elementId(ds)=eid)-[:FEEDS]->(:FeaturePipeline)
              -[:GENERATES]->(:Feature)
              -[:USED_IN]->(:Model)
-             -[:POWERS]->(s:Strategy {id: $id})
+             -[:POWERS]->(:Strategy)
+             -[:PRODUCES]->(:PnL)
 RETURN path
 ```
 
+> Returns all PnL periods. To focus on 2024 only, add `WHERE p.period = '2024-FY'` after binding `(p:PnL)`.
+
 ---
 
-### ▶ Show correlated features for this Feature
+#### `What breaks if I lose`
+Blast radius — shows all live models and strategies exposed to losing this dataset.
 
-**Trigger node:** `Feature`
-
-**Purpose:** Show other features that are statistically correlated with the selected one.
-
-**Cypher:**
 ```cypher
-MATCH path = (f:Feature {id: $id})-[r:CORRELATED_WITH]-(other:Feature)
+UNWIND $nodes AS eid
+MATCH path = (ds:Dataset WHERE elementId(ds)=eid)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(m:Model)
+             -[:POWERS]->(:Strategy)
+WHERE m.status = 'Live'
 RETURN path
 ```
 
 ---
 
-## Suggested Bloom Perspective Configuration
+### On DataVendor
 
-**Node colours (suggested):**
-| Node | Colour |
-|---|---|
-| DataVendor | Purple |
-| Dataset | Orange |
-| FeaturePipeline | Blue |
-| Feature | Teal |
-| Model | Green |
-| Strategy | Red |
-| PnL | Yellow |
+#### `Show full exposure`
+Traces everything a vendor's data feeds into — stops at live models.
 
-**Node size:** Map `Dataset` size to `annual_license_cost` — bigger bubble = more expensive dataset.
+```cypher
+UNWIND $nodes AS eid
+MATCH path = (dv:DataVendor WHERE elementId(dv)=eid)-[:PROVIDES]->(:Dataset)
+             -[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(m:Model)
+WHERE m.status = 'Live'
+RETURN path
+```
 
-**Edge labels to show:**
-- `PROVIDES` → show `renewal_date`
-- `USED_IN` → show `shapley_value`
-- `POWERS` → show `signal_weight`
-- `SUBSTITUTABLE_FOR` → show `overlap_score`
+---
 
-**Caption properties:**
-- Dataset: `name` + `annual_license_cost`
-- Model: `name` + `live_sharpe`
-- Strategy: `name` + `aum_usd_m`
+### On Model
+
+#### `Features driving`
+Shows all datasets and features feeding into this model (in-production features only).
+
+```cypher
+UNWIND $nodes AS eid
+MATCH path = (:Dataset)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(f:Feature)
+             -[r:USED_IN]->(m:Model WHERE elementId(m)=eid)
+WHERE r.in_production = true
+RETURN path
+```
+
+---
+
+#### `Show correlated features`
+Surfaces redundant feature pairs both used in this model with R² > 0.45.
+
+```cypher
+UNWIND $nodes AS eid
+MATCH (m:Model WHERE elementId(m)=eid)
+MATCH path = (:Dataset)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(f1:Feature)-[r:CORRELATED_WITH]->(f2:Feature)
+             <-[:GENERATES]-(:FeaturePipeline)<-[:FEEDS]-(:Dataset)
+WHERE (f1)-[:USED_IN]->(m) AND (f2)-[:USED_IN]->(m)
+  AND r.r_squared > 0.45
+RETURN path
+```
+
+---
+
+### On Strategy
+
+#### `Show PnL history`
+Expands all PnL records for the selected strategy across all periods.
+
+```cypher
+UNWIND $nodes AS eid
+MATCH path = (s:Strategy WHERE elementId(s)=eid)-[:PRODUCES]->(p:PnL)
+RETURN path
+```
+
+---
+
+## Indexes
+
+The perspective uses the following indexes (all `ONLINE`):
+
+| Index | Type | Covers |
+|---|---|---|
+| `bloom_node_search` | FULLTEXT | `name` on all 6 node labels — powers the Bloom search bar |
+| `model_status` | RANGE | `Model.status` |
+| `pnl_period` | RANGE | `PnL.period` |
+| `dataset_active` | RANGE | `Dataset.active` |
+| Per-label constraints | RANGE | `id` on every node label |
+
+---
+
+## Suggested Demo Flow
+
+1. **Search bar:** type `"Earnings"` → Bloom returns the `Earnings Call NLP Sentiment` Dataset and `Earnings Call Tone Score` Feature via the fulltext index
+2. **Right-click Dataset → `Full path from dataset to PnL`** → reveals the complete lineage graph
+3. **Right-click Model → `Show correlated features`** → highlights redundancy with News & Social Media Sentiment
+4. **Right-click same Dataset → `What breaks if I lose`** → shows blast radius across live strategies
+5. **Search phrase:** `Renewals before 2025-06-01` → surfaces upcoming contracts with vendor context
+6. **Search phrase:** `Datasets with MNPI risk above 0.5` → pivots to compliance story
+7. **Search phrase:** `Live models with Sharpe below 1.5` → pivots to underperformance / dataset ROI story
