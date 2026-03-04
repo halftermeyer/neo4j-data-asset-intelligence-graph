@@ -7,12 +7,13 @@
 
 ## Loading the Dashboard
 
-Two options:
+Three options:
 
 | Method | How |
 |---|---|
 | **From backup** | Restore `data/neo4j-aura-backup.backup` in the Aura Console — the dashboard is persisted as a node and loads automatically in NeoDash |
-| **Manual import** | In NeoDash, connect to your instance → *Load dashboard* → select `dashboard/dashboard.json` |
+| **NeoDash manual import** | In NeoDash, connect to your instance → *Load dashboard* → select `dashboard/NeoDash_dashboard.json` |
+| **Aura Dashboard import** | In the Aura Console, import `dashboard/Aura_dashboard.json` |
 
 ---
 

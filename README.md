@@ -77,7 +77,8 @@ neo4j-data-asset-intelligence/
 │   └── data asset intel perspective.json  ← Importable Bloom perspective file
 └── dashboard/
     ├── DASHBOARD_GUIDE.md          ← NeoDash pages, reports & copy-paste Cypher
-    └── dashboard.json              ← Importable NeoDash dashboard file
+    ├── NeoDash_dashboard.json      ← Importable NeoDash dashboard file
+    └── Aura_dashboard.json         ← Importable Aura Dashboard file
 ```
 
 ---
@@ -88,7 +89,7 @@ neo4j-data-asset-intelligence/
 - A running **Neo4j AuraDB** instance (or local Neo4j 5.x)
 - Python 3.9+ with `neo4j`, `pandas`, `faker` installed
 - Neo4j Bloom (available in Aura Console)
-- [NeoDash](https://neodash.graphapp.io) (open source, runs in browser — connect to your AuraDB instance)
+- [NeoDash](https://neodash.graphapp.io) (open source, runs in browser — connect to your AuraDB instance) **or** Aura Dashboard (available in the Aura Console)
 
 ### Option A — Restore from backup *(fastest)*
 1. Clone this repo
@@ -99,7 +100,9 @@ neo4j-data-asset-intelligence/
 ### Option B — Fresh seed
 1. Clone this repo
 2. Open `data/seed.ipynb` in Jupyter, set your AuraDB credentials in the first cell, and run all cells to load the synthetic dataset
-3. Open NeoDash, connect to your instance, and load `dashboard/dashboard.json` via *Load dashboard* — refer to `dashboard/DASHBOARD_GUIDE.md` for report details
+3. Load a dashboard:
+   - **NeoDash**: connect to your instance → *Load dashboard* → select `dashboard/NeoDash_dashboard.json` — refer to `dashboard/DASHBOARD_GUIDE.md` for report details
+   - **Aura Dashboard**: in the Aura Console, import `dashboard/Aura_dashboard.json`
 4. Open Bloom and import `bloom/data asset intel perspective.json` — then follow `bloom/BLOOM_DEMO_FLOW.md`
 5. Run the Cypher queries in `queries/` from the Aura Console or Neo4j Browser
 

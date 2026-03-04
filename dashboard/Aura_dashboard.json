@@ -1,0 +1,707 @@
+{
+  "version": 2,
+  "title": "Data Asset Intelligence",
+  "description": "",
+  "pages": [
+    {
+      "version": 1,
+      "title": "Portfolio Overview",
+      "widgets": [
+        {
+          "version": 1,
+          "title": "AUM per Strategy",
+          "w": 5,
+          "h": 4,
+          "x": 6,
+          "y": 0,
+          "meta": {},
+          "settings": {
+            "type": "bar",
+            "query": "MATCH (s:Strategy)\nRETURN s.name     AS strategy,\n       //s.approach AS approach,\n       s.aum_usd_m AS aum_usd_m\nORDER BY s.aum_usd_m DESC\n\n\n",
+            "databaseName": "neo4j",
+            "dimensionKey": "strategy",
+            "valueKeys": [
+              "aum_usd_m"
+            ],
+            "orientation": "vertical",
+            "scaleType": "linear",
+            "showLegend": false,
+            "showDataZoom": "auto",
+            "version": 1,
+            "barArrangement": "grouped",
+            "enableDownloadImage": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Model Status Selector",
+          "w": 3,
+          "h": 1,
+          "x": 3,
+          "y": 2,
+          "meta": {},
+          "settings": {
+            "version": 1,
+            "type": "filter",
+            "databaseName": "neo4j",
+            "entityType": "node",
+            "entityLabel": "Model",
+            "entityPropertyKey": "status",
+            "parameterName": "neodash_model_status",
+            "enableTimeZone": false,
+            "numberType": "Integer"
+          }
+        },
+        {
+          "version": 1,
+          "title": "PnL Period Selector",
+          "w": 3,
+          "h": 1,
+          "x": 3,
+          "y": 4,
+          "meta": {},
+          "settings": {
+            "version": 1,
+            "type": "filter",
+            "databaseName": "neo4j",
+            "entityType": "node",
+            "entityLabel": "PnL",
+            "entityPropertyKey": "period",
+            "parameterName": "neodash_pnl_period",
+            "enableTimeZone": false,
+            "numberType": "Integer"
+          }
+        },
+        {
+          "version": 1,
+          "title": "Sum of license + ingestion cost across all active datasets.",
+          "w": 3,
+          "h": 2,
+          "x": 0,
+          "y": 2,
+          "meta": {},
+          "settings": {
+            "type": "singleValue",
+            "query": "MATCH (d:Dataset)\nWHERE d.active = true\nRETURN sum(d.annual_license_cost + d.ingestion_cost) AS Annual_Data_Spend_USD\n\n\n",
+            "databaseName": "neo4j",
+            "version": 1,
+            "fontSize": 72,
+            "align": 1
+          }
+        },
+        {
+          "version": 1,
+          "title": "Model Count",
+          "w": 2,
+          "h": 2,
+          "x": 0,
+          "y": 6,
+          "meta": {
+            "latestCypherQueries": [
+              {
+                "query": "MATCH (m:Model WHERE m.status = $neodash_model_status)\nRETURN count(m) AS Live_Models",
+                "origin": "user"
+              },
+              {
+                "query": "MATCH (m:Model = m.status IN $neodash_model_status)\nRETURN count(m) AS Live_Models",
+                "origin": "user"
+              }
+            ]
+          },
+          "settings": {
+            "type": "singleValue",
+            "query": "MATCH (m:Model WHERE m.status = $neodash_model_status)\nRETURN count(m) AS Live_Models\n\n\n",
+            "databaseName": "neo4j",
+            "version": 1,
+            "fontSize": 72,
+            "align": 1
+          }
+        },
+        {
+          "version": 1,
+          "title": "Per-model Sharpe comparison and decay between backtest and live",
+          "w": 5,
+          "h": 4,
+          "x": 6,
+          "y": 4,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (m:Model)\nWHERE m.status = $neodash_model_status\nOPTIONAL MATCH (f:Feature)-[ui:USED_IN]->(m)\nWHERE ui.in_production = true\nWITH m, count(DISTINCT f) AS features_in_production\nRETURN m.name                                             AS model,\n       m.model_type                                       AS type,\n       m.asset_class                                      AS asset_class,\n       m.backtest_sharpe                                  AS backtest_sharpe,\n       m.live_sharpe                                      AS live_sharpe,\n       round((m.backtest_sharpe - m.live_sharpe) * 100) / 100 AS sharpe_decay,\n       features_in_production,\n       m.inception_year                                   AS live_since\nORDER BY m.live_sharpe DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Strategy PnL",
+          "w": 4,
+          "h": 4,
+          "x": 2,
+          "y": 6,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (s:Strategy)-[:PRODUCES]->(p:PnL)\nWHERE p.period = $neodash_pnl_period\nRETURN s.name              AS strategy,\n       s.approach           AS approach,\n       s.aum_usd_m          AS aum_usd_m,\n       p.gross_pnl_usd_m    AS gross_pnl_usd_m,\n       p.net_pnl_usd_m      AS net_pnl_usd_m,\n       p.sharpe             AS period_sharpe,\n       p.max_drawdown_pct   AS max_drawdown_pct\nORDER BY p.net_pnl_usd_m DESC",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Total AUM across all live strategies",
+          "w": 3,
+          "h": 2,
+          "x": 0,
+          "y": 4,
+          "meta": {},
+          "settings": {
+            "type": "singleValue",
+            "query": "MATCH (s:Strategy)\nRETURN sum(s.aum_usd_m) AS Total_AUM_USD_M",
+            "databaseName": "neo4j",
+            "version": 1,
+            "fontSize": 72,
+            "align": 1
+          }
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "title": "Procurement & Renewals",
+      "widgets": [
+        {
+          "version": 1,
+          "title": "Lookahead Window (days)",
+          "w": 3,
+          "h": 1,
+          "x": 0,
+          "y": 1,
+          "meta": {},
+          "settings": {
+            "version": 1,
+            "type": "filter",
+            "databaseName": "neo4j",
+            "entityType": "custom",
+            "parameterName": "neodash_days_horizon",
+            "enableTimeZone": false,
+            "numberType": "Integer",
+            "customQuery": "RETURN coalesce(toInteger($input), 90)\n\n\n"
+          }
+        },
+        {
+          "version": 1,
+          "title": "Top Datasets by Total Cost",
+          "w": 3,
+          "h": 4,
+          "x": 0,
+          "y": 3,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\nOPTIONAL MATCH (d)-[:SUBSTITUTABLE_FOR]->(alt:Dataset)\nWITH d, v, collect(alt.name) AS substitutes\nRETURN d.name                AS dataset,\n       v.name                AS vendor,\n       (d.annual_license_cost + d.ingestion_cost) AS total_cost_usd,\n       CASE WHEN size(substitutes) > 0 THEN 'Has substitute' ELSE 'No substitute' END AS has_substitute\nORDER BY total_cost_usd DESC\nLIMIT 15\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Dataset pairs where a cheaper substitute exists with meaningful signal overlap",
+          "w": 6,
+          "h": 4,
+          "x": 3,
+          "y": 8,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)\nWHERE sub.overlap_score >= 0.4\n  AND sub.cost_delta_usd >= 50000\nMATCH (v1:DataVendor)-[:PROVIDES]->(d)\nMATCH (v2:DataVendor)-[:PROVIDES]->(alt)\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(:Feature)\n               -[:USED_IN]->(m:Model {status: 'Live'})\nRETURN d.name                 AS current_dataset,\n       v1.name                AS current_vendor,\n       d.annual_license_cost  AS current_cost_usd,\n       alt.name               AS substitute_dataset,\n       v2.name                AS substitute_vendor,\n       alt.annual_license_cost AS substitute_cost_usd,\n       sub.cost_delta_usd     AS potential_saving_usd,\n       round(sub.overlap_score * 100) + '%' AS signal_overlap,\n       count(DISTINCT m)      AS live_models_at_risk,\n       CASE\n         WHEN sub.overlap_score >= 0.5 AND sub.cost_delta_usd > 100000 THEN 'Strong substitution candidate'\n         ELSE 'Worth evaluating'\n       END                    AS assessment\nORDER BY sub.cost_delta_usd DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "PnL Period Selector",
+          "w": 3,
+          "h": 1,
+          "x": 0,
+          "y": 2,
+          "meta": {},
+          "settings": {
+            "version": 1,
+            "type": "filter",
+            "databaseName": "neo4j",
+            "entityType": "node",
+            "entityLabel": "PnL",
+            "entityPropertyKey": "period",
+            "parameterName": "neodash_pnl_period",
+            "enableTimeZone": false,
+            "numberType": "Integer"
+          }
+        },
+        {
+          "version": 1,
+          "title": "Reference Date Selector",
+          "w": 3,
+          "h": 1,
+          "x": 0,
+          "y": 0,
+          "meta": {},
+          "settings": {
+            "version": 1,
+            "type": "filter",
+            "databaseName": "neo4j",
+            "entityType": "date",
+            "parameterName": "neodash_today",
+            "enableTimeZone": false,
+            "numberType": "Integer"
+          }
+        },
+        {
+          "version": 1,
+          "title": "Auto-renew exposure",
+          "w": 6,
+          "h": 4,
+          "x": 3,
+          "y": 4,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)\nWHERE prov.auto_renew = true\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[:USED_IN]->(m:Model)\nWHERE m.status = $neodash_model_status\nWITH v, d, prov, count(DISTINCT m) AS live_model_count\nRETURN v.name                 AS vendor,\n       d.name                 AS dataset,\n       prov.annual_fee_usd    AS annual_fee_usd,\n       prov.renewal_date      AS auto_renews_on,\n       prov.notice_period_days AS cancel_by_days_before,\n       live_model_count,\n       'Will auto-renew — confirm intent' AS action_required\nORDER BY prov.annual_fee_usd DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Contracts renewing within the lookahead window, with ROI context and a recommendation.",
+          "w": 6,
+          "h": 4,
+          "x": 3,
+          "y": 0,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)\nWHERE date(prov.renewal_date) >= date($neodash_today)\n  AND date(prov.renewal_date) <= date($neodash_today) + duration({days: toInteger($neodash_days_horizon)})\n\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[:USED_IN]->(m:Model {status: 'Live'})\n               -[pw:POWERS]->(s:Strategy)\n               -[:PRODUCES]->(p:PnL)\nWHERE p.period = $neodash_pnl_period\n\nOPTIONAL MATCH (d)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)\n\nWITH v, d, prov,\n     coalesce(sum(DISTINCT pw.signal_weight * p.net_pnl_usd_m), 0) AS approx_pnl_exposure_m,\n     collect(DISTINCT m.name)   AS live_models,\n     collect(DISTINCT s.name)   AS live_strategies,\n     collect(DISTINCT alt.name) AS substitutes,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\n\nRETURN v.name                  AS vendor,\n       d.name                  AS dataset,\n       prov.renewal_date       AS renewal_date,\n       prov.notice_period_days AS notice_days,\n       prov.auto_renew         AS auto_renews,\n       prov.annual_fee_usd     AS annual_fee_usd,\n       tcdo_usd                AS total_cost_usd,\n       round(approx_pnl_exposure_m * 100) / 100 AS pnl_exposure_usd_m,\n       size(live_models)       AS live_model_count,\n       live_strategies,\n       CASE WHEN size(substitutes) > 0 THEN substitutes\n            ELSE ['None identified']\n       END                     AS available_substitutes,\n       CASE\n         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) = 0 THEN 'RENEW — critical, no substitute'\n         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) > 0 THEN 'NEGOTIATE — high value, substitute exists'\n         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) > 0 THEN 'CONSIDER DROPPING — low ROI, substitute available'\n         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) = 0 THEN 'REVIEW — low ROI, no substitute'\n         ELSE 'STANDARD RENEWAL'\n       END                     AS recommendation\nORDER BY date(prov.renewal_date)",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "title": "ROI Attribution",
+      "widgets": [
+        {
+          "version": 1,
+          "title": "Underperforming Dataset",
+          "w": 7,
+          "h": 4,
+          "x": 4,
+          "y": 9,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[ui:USED_IN]->(m:Model {status: 'Live'})\n               -[pw:POWERS]->(s:Strategy)\n               -[:PRODUCES]->(p:PnL)\nWHERE p.period = $neodash_pnl_period\nWITH d,\n     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_m,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\nWHERE tcdo_usd >= 50000\n  AND attributed_pnl_m < 5.0\nRETURN d.name    AS dataset,\n       d.category AS category,\n       d.active  AS is_active,\n       tcdo_usd  AS annual_cost_usd,\n       round(attributed_pnl_m * 100) / 100 AS attributed_pnl_usd_m,\n       'Low ROI — review or drop' AS flag\nORDER BY tcdo_usd DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Vendor ROI Summary",
+          "w": 7,
+          "h": 4,
+          "x": 4,
+          "y": 5,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\n      -[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\n      -[pw:POWERS]->(s:Strategy)\n      -[:PRODUCES]->(p:PnL)\nWHERE m.status = $neodash_model_status\n  AND p.period = $neodash_pnl_period\nWITH v,\n     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS total_pnl_m,\n     sum(DISTINCT (d.annual_license_cost + d.ingestion_cost))    AS total_spend,\n     count(DISTINCT d) AS datasets\nRETURN v.name  AS vendor,\n       v.tier  AS tier,\n       datasets,\n       total_spend AS annual_spend_usd,\n       round(total_pnl_m * 100) / 100 AS attributed_pnl_usd_m,\n       round((total_pnl_m * 1000000) / total_spend * 10) / 10 AS vendor_roi_multiple\nORDER BY vendor_roi_multiple DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Feature Shapley Attribution",
+          "w": 4,
+          "h": 4,
+          "x": 0,
+          "y": 5,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\nWHERE ui.in_production = true\n  AND m.status = $neodash_model_status\nRETURN f.name         AS feature,\n       f.factor_type  AS factor_type,\n       d.name         AS source_dataset,\n       m.name         AS model,\n       ui.shapley_value AS shapley_value,\n       ui.importance_rank AS rank\nORDER BY ui.shapley_value DESC\nLIMIT 20\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Full Dataset ROI Table",
+          "w": 7,
+          "h": 5,
+          "x": 4,
+          "y": 0,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[ui:USED_IN]->(m:Model)\n               -[pw:POWERS]->(s:Strategy)\n               -[:PRODUCES]->(p:PnL)\nWHERE m.status = $neodash_model_status\n  AND p.period = $neodash_pnl_period\nOPTIONAL MATCH (d)-[:SUBSTITUTABLE_FOR]->(alt:Dataset)\nWITH v, d,\n     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_m,\n     count(DISTINCT m) AS model_count,\n     collect(DISTINCT alt.name) AS substitutes,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\nRETURN v.name    AS vendor,\n       d.name    AS dataset,\n       d.category AS category,\n       tcdo_usd  AS annual_cost_usd,\n       round(attributed_pnl_m * 100) / 100 AS attributed_pnl_usd_m,\n       CASE WHEN tcdo_usd > 0\n            THEN round((attributed_pnl_m * 1000000) / tcdo_usd * 10) / 10\n            ELSE 0\n       END       AS roi_multiple,\n       model_count AS live_models_using,\n       CASE WHEN size(substitutes) > 0 THEN substitutes ELSE ['None'] END AS substitutes,\n       d.mnpi_risk_score AS mnpi_risk,\n       d.signal_half_life_days AS half_life_days\nORDER BY roi_multiple DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Dataset ROI Leaderboard",
+          "w": 4,
+          "h": 5,
+          "x": 0,
+          "y": 0,
+          "meta": {
+            "latestCypherQueries": [
+              {
+                "query": "MATCH (d:Dataset)\n      -[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\n      -[pw:POWERS]->(s:Strategy)\n      -[:PRODUCES]->(p:PnL)\nWHERE m.status = $neodash_model_status\n  AND p.period = $neodash_pnl_period\nWITH d,\n     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS attributed_pnl_usd_m,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\nRETURN d.name AS dataset,\n       round((attributed_pnl_usd_m * 1000000) / tcdo_usd * 10) / 10 AS roi_multiple\nORDER BY roi_multiple DESC\nLIMIT 12",
+                "origin": "user"
+              }
+            ]
+          },
+          "settings": {
+            "type": "bar",
+            "query": "MATCH (d:Dataset)\n      -[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\n      -[pw:POWERS]->(s:Strategy)\n      -[:PRODUCES]->(p:PnL)\nWHERE m.status = $neodash_model_status\n  AND p.period = $neodash_pnl_period\nWITH d,\n     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS attributed_pnl_usd_m,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\nRETURN d.name AS dataset,\n       round((attributed_pnl_usd_m * 1000000) / tcdo_usd * 10) / 10 AS roi_multiple\nORDER BY roi_multiple DESC\nLIMIT 12\n\n\n",
+            "databaseName": "neo4j",
+            "dimensionKey": "dataset",
+            "valueKeys": [
+              "roi_multiple"
+            ],
+            "orientation": "vertical",
+            "scaleType": "linear",
+            "showLegend": false,
+            "showDataZoom": "auto",
+            "version": 1,
+            "barArrangement": "grouped",
+            "enableDownloadImage": true
+          }
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "title": "Risk & Compliance",
+      "widgets": [
+        {
+          "version": 1,
+          "title": "AUM Exposed to High-MNPI Data",
+          "w": 3,
+          "h": 2,
+          "x": 0,
+          "y": 2,
+          "meta": {},
+          "settings": {
+            "type": "singleValue",
+            "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\n      -[:POWERS]->(s:Strategy)\nWHERE d.mnpi_risk_score >= 0.5\nRETURN sum(DISTINCT s.aum_usd_m) AS AUM_Exposed_to_MNPI_USD_M\n\n\n",
+            "databaseName": "neo4j",
+            "version": 1,
+            "fontSize": 72,
+            "align": 1
+          }
+        },
+        {
+          "version": 1,
+          "title": "Single Point of Failure",
+          "w": 5,
+          "h": 5,
+          "x": 0,
+          "y": 8,
+          "meta": {
+            "latestCypherQueries": [
+              {
+                "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model)\nWHERE m.status = $neodash_model_status\n  AND NOT EXISTS { MATCH (d)-[:SUBSTITUTABLE_FOR]->(:Dataset) }\nWITH d, collect(DISTINCT m.name) AS dependent_models\nRETURN d.name                AS dataset,\n       d.category            AS category,\n       d.annual_license_cost AS license_cost_usd,\n       d.mnpi_risk_score     AS mnpi_risk,\n       dependent_models,\n       size(dependent_models) AS model_count,\n       'No substitute identified' AS risk_flag\nORDER BY d.annual_license_cost DESC",
+                "origin": "user"
+              }
+            ]
+          },
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model)\nWHERE m.status = $neodash_model_status\n  AND NOT EXISTS { MATCH (d)-[:SUBSTITUTABLE_FOR]->(:Dataset) }\nWITH d, collect(DISTINCT m.name) AS dependent_models\nRETURN d.name                AS dataset,\n       d.category            AS category,\n       d.annual_license_cost AS license_cost_usd,\n       d.mnpi_risk_score     AS mnpi_risk,\n       dependent_models,\n       size(dependent_models) AS model_count,\n       'No substitute identified' AS risk_flag\nORDER BY d.annual_license_cost DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Alpha Decay Watch -- highest risk of alpha crowding",
+          "w": 7,
+          "h": 4,
+          "x": 5,
+          "y": 4,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\n      -[:POWERS]->(s:Strategy)\nWHERE d.signal_half_life_days <= 30\nRETURN d.name                    AS dataset,\n       d.signal_half_life_days   AS half_life_days,\n       d.annual_license_cost     AS license_cost_usd,\n       collect(DISTINCT m.name)  AS live_models,\n       collect(DISTINCT s.name)  AS live_strategies,\n       'Short half-life — monitor alpha decay' AS warning\nORDER BY d.signal_half_life_days\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "MNPI Risk Audit",
+          "w": 5,
+          "h": 4,
+          "x": 0,
+          "y": 4,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "\nMATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\n      -[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[:USED_IN]->(m:Model)\n      -[:POWERS]->(s:Strategy)\nWHERE d.mnpi_risk_score >= 0.5\n  AND m.status = $neodash_model_status\nRETURN d.name                          AS dataset,\n       d.mnpi_risk_score               AS mnpi_risk_score,\n       v.name                          AS vendor,\n       collect(DISTINCT m.name)        AS models_using,\n       collect(DISTINCT s.name)        AS strategies_using,\n       sum(DISTINCT s.aum_usd_m)       AS total_aum_exposed_m,\n       'Compliance review required'    AS flag\nORDER BY d.mnpi_risk_score DESC\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Correlated Feature Pairs -- potential duplicate signal spend",
+          "w": 9,
+          "h": 4,
+          "x": 3,
+          "y": 0,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "\nMATCH (f1:Feature)-[c:CORRELATED_WITH]->(f2:Feature)\nWHERE c.r_squared > 0.45\nMATCH (d1:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f1)\nMATCH (d2:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f2)\nMATCH (m:Model {status: 'Live'})\nWHERE (f1)-[:USED_IN]->(m) AND (f2)-[:USED_IN]->(m)\nRETURN m.name    AS model,\n       f1.name   AS feature_1,\n       f2.name   AS feature_2,\n       round(c.r_squared * 100) + '%' AS r_squared,\n       d1.name   AS source_dataset_1,\n       d2.name   AS source_dataset_2,\n       CASE WHEN d1.name = d2.name\n            THEN 'Same dataset — definite overlap'\n            ELSE 'Different datasets — potential redundancy'\n       END       AS redundancy_type,\n       c.detected_date AS detected\nORDER BY c.r_squared DESC\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Datasets with MNPI Risk ≥ 0.5",
+          "w": 3,
+          "h": 2,
+          "x": 0,
+          "y": 0,
+          "meta": {
+            "latestCypherQueries": [
+              {
+                "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\nWHERE d.mnpi_risk_score >= 0.5\nRETURN toString(count(DISTINCT d)) AS High_MNPI_Datasets",
+                "origin": "user"
+              },
+              {
+                "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\nWHERE d.mnpi_risk_score >= 0.5\nRETURN toInteger(count(DISTINCT d)) AS High_MNPI_Datasets",
+                "origin": "user"
+              }
+            ]
+          },
+          "settings": {
+            "type": "singleValue",
+            "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\nWHERE d.mnpi_risk_score >= 0.5\nRETURN toString(count(DISTINCT d)) AS High_MNPI_Datasets\n\n\n",
+            "databaseName": "neo4j",
+            "version": 1,
+            "fontSize": 72,
+            "align": 1
+          }
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "title": "Dataset Drill-down",
+      "widgets": [
+        {
+          "version": 1,
+          "title": "Alternative datasets",
+          "w": 6,
+          "h": 3,
+          "x": 5,
+          "y": 4,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)\nMATCH (v2:DataVendor)-[:PROVIDES]->(alt)\nRETURN alt.name                AS substitute_dataset,\n       v2.name                 AS substitute_vendor,\n       alt.annual_license_cost AS substitute_cost_usd,\n       sub.cost_delta_usd      AS potential_saving_usd,\n       round(sub.overlap_score * 100) + '%' AS signal_overlap,\n       CASE\n         WHEN sub.overlap_score >= 0.5 AND sub.cost_delta_usd > 100000\n              THEN 'Strong candidate'\n         ELSE 'Worth evaluating'\n       END                     AS assessment\nORDER BY sub.overlap_score DESC\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Dataset Profile",
+          "w": 8,
+          "h": 2,
+          "x": 0,
+          "y": 0,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "\nMATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)\nWHERE d.name = $neodash_dataset_name\nRETURN d.name                  AS dataset,\n       v.name                  AS vendor,\n       v.tier                  AS vendor_tier,\n       d.category              AS category,\n       d.asset_class_coverage  AS asset_class,\n       d.annual_license_cost   AS license_cost_usd,\n       d.ingestion_cost        AS ingestion_cost_usd,\n       (d.annual_license_cost + d.ingestion_cost) AS total_cost_usd,\n       d.mnpi_risk_score       AS mnpi_risk,\n       d.signal_half_life_days AS half_life_days,\n       d.refresh_frequency     AS refresh,\n       prov.renewal_date       AS renewal_date,\n       prov.auto_renew         AS auto_renews,\n       prov.notice_period_days AS notice_days,\n       prov.annual_fee_usd     AS contracted_fee_usd,\n       d.active                AS active\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Blast Radius",
+          "w": 6,
+          "h": 2,
+          "x": 5,
+          "y": 2,
+          "meta": {},
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)-[:FEEDS]->(fp:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[:USED_IN]->(m:Model)\n      -[:POWERS]->(s:Strategy)\nWHERE d.name = $neodash_dataset_name\nRETURN d.name                      AS at_risk_dataset,\n       collect(DISTINCT fp.name)   AS affected_pipelines,\n       collect(DISTINCT f.name)    AS affected_features,\n       collect(DISTINCT m.name)    AS affected_models,\n       collect(DISTINCT s.name)    AS affected_strategies,\n       count(DISTINCT s)           AS strategy_count\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Full Lineage Graph",
+          "w": 5,
+          "h": 8,
+          "x": 0,
+          "y": 2,
+          "meta": {},
+          "settings": {
+            "type": "graph",
+            "query": "MATCH path = (d:Dataset)-[:FEEDS]->(fp:FeaturePipeline)\n             -[:GENERATES]->(f:Feature)\n             -[:USED_IN]->(m:Model)\n             -[:POWERS]->(s:Strategy)\n             -[:PRODUCES]->(p:PnL)\nWHERE d.name = $neodash_dataset_name\n  AND p.period = $neodash_pnl_period\nRETURN path\n\n\n",
+            "databaseName": "neo4j",
+            "version": 2,
+            "enableSidePanel": true,
+            "enableContextMenu": true,
+            "layout": {
+              "type": "d3Force"
+            },
+            "enableDownloadImage": true
+          }
+        },
+        {
+          "version": 1,
+          "title": "Select Dataset",
+          "w": 3,
+          "h": 1,
+          "x": 8,
+          "y": 0,
+          "meta": {},
+          "settings": {
+            "version": 1,
+            "type": "filter",
+            "databaseName": "neo4j",
+            "entityType": "node",
+            "entityLabel": "Dataset",
+            "entityPropertyKey": "name",
+            "parameterName": "neodash_dataset_name",
+            "enableTimeZone": false,
+            "numberType": "Integer"
+          }
+        },
+        {
+          "version": 1,
+          "title": "Feature Attribution",
+          "w": 6,
+          "h": 3,
+          "x": 5,
+          "y": 7,
+          "meta": {
+            "latestCypherQueries": [
+              {
+                "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\nWHERE d.name = $neodash_dataset_name\n  AND ui.in_production = true\nRETURN f.name          AS feature,\n       f.factor_type   AS factor_type,\n       m.name          AS model,\n       ui.shapley_value AS shapley_value,\n       ui.importance_rank AS rank\nORDER BY ui.shapley_value DESC",
+                "origin": "user"
+              },
+              {
+                "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\nWHERE d.name = $neodash_dataset_name\nui.in_production = true\nRETURN f.name          AS feature,\n       f.factor_type   AS factor_type,\n       m.name          AS model,\n       ui.shapley_value AS shapley_value,\n       ui.importance_rank AS rank\nORDER BY ui.shapley_value DESC",
+                "origin": "user"
+              }
+            ]
+          },
+          "settings": {
+            "type": "table",
+            "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\nWHERE d.name = $neodash_dataset_name\n  AND ui.in_production = true\nRETURN f.name          AS feature,\n       f.factor_type   AS factor_type,\n       m.name          AS model,\n       ui.shapley_value AS shapley_value,\n       ui.importance_rank AS rank\nORDER BY ui.shapley_value DESC\n\n\n",
+            "databaseName": "neo4j",
+            "actions": [],
+            "version": 1,
+            "richRenderCells": false,
+            "enableRecordsDownload": true
+          }
+        }
+      ]
+    }
+  ],
+  "params": [
+    {
+      "version": 1,
+      "key": "neodash_dataset"
+    },
+    {
+      "version": 1,
+      "key": "neodash_pnl_period"
+    },
+    {
+      "version": 1,
+      "key": "neodash_days_horizon"
+    },
+    {
+      "version": 1,
+      "key": "neodash_today"
+    },
+    {
+      "version": 1,
+      "key": "neodash_dataset_name"
+    },
+    {
+      "version": 1,
+      "key": "neodash_model_status"
+    }
+  ]
+}
