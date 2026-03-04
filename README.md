@@ -70,7 +70,8 @@ neo4j-data-asset-intelligence/
 ├── queries/
 │   ├── 01_lineage_impact.cypher    ← Angle 1: dependency & impact analysis
 │   ├── 02_roi_scoring.cypher       ← Angle 2: dataset ROI attribution
-│   └── 03_renewal_decisions.cypher ← Angle 3: procurement & renewal intelligence
+│   ├── 03_renewal_decisions.cypher ← Angle 3: procurement & renewal intelligence
+│   └── saved_cypher.csv            ← Neo4j Browser bookmark file (all queries + Bloom)
 ├── bloom/
 │   ├── BLOOM_GUIDE.md              ← Perspective config, search phrases & scene actions
 │   ├── BLOOM_DEMO_FLOW.md          ← Step-by-step demo script for Bloom

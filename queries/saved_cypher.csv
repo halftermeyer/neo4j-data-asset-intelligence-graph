@@ -1,0 +1,786 @@
+name,description,query,id,parentId,isFolder
+Data Asset Intelligence Graph,,,0,1,true
+1 — Lineage & Dependency,,,10,0,true
+2 — ROI Scoring,,,20,0,true
+3 — Procurement & Renewal,,,30,0,true
+4 — Dashboard Queries,,,40,0,true
+Page 1 — Portfolio Overview,,,41,40,true
+Page 2 — Procurement & Renewals,,,42,40,true
+Page 3 — ROI Attribution,,,43,40,true
+Page 4 — Risk & Compliance,,,44,40,true
+Page 5 — Dataset Drill-down,,,45,40,true
+5 — Bloom Queries,,,50,0,true
+Search Phrases,,,51,50,true
+Scene Actions,,,52,50,true
+⚙️ Set params — Q1.1 & Q1.2,,:param dataset_name => 'Consumer Credit Card Spend - US',100,10,false
+Q1.1 — Full lineage path,,"MATCH path = (d:Dataset)
+             -[:FEEDS]->(fp:FeaturePipeline)
+             -[:GENERATES]->(f:Feature)
+             -[:USED_IN]->(m:Model)
+             -[:POWERS]->(s:Strategy)
+             -[:PRODUCES]->(p:PnL)
+WHERE d.name CONTAINS $dataset_name
+RETURN path",101,10,false
+Q1.2 — Impact blast radius,,"MATCH (d:Dataset)
+      -[:FEEDS]->(fp:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[:USED_IN]->(m:Model)
+      -[:POWERS]->(s:Strategy)
+WHERE d.name CONTAINS $dataset_name
+RETURN d.name                         AS at_risk_dataset,
+       collect(DISTINCT fp.name)      AS affected_pipelines,
+       collect(DISTINCT f.name)       AS affected_features,
+       collect(DISTINCT m.name)       AS affected_models,
+       collect(DISTINCT s.name)       AS affected_strategies,
+       count(DISTINCT s)              AS strategy_count",102,10,false
+⚙️ Set params — Q1.3,,:param min_strategy_count => 1,103,10,false
+Q1.3 — Dataset centrality,,"MATCH (d:Dataset)
+      -[:FEEDS]->(fp:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[:USED_IN]->(m:Model)
+      -[:POWERS]->(s:Strategy)
+WITH d,
+     count(DISTINCT fp) AS pipeline_count,
+     count(DISTINCT f)  AS feature_count,
+     count(DISTINCT m)  AS model_count,
+     count(DISTINCT s)  AS strategy_count
+WHERE strategy_count >= $min_strategy_count
+RETURN d.name                             AS dataset,
+       d.category                         AS category,
+       pipeline_count,
+       feature_count,
+       model_count,
+       strategy_count,
+       (model_count + strategy_count)     AS dependency_score
+ORDER BY dependency_score DESC",104,10,false
+⚙️ Set params — Q1.4,,:param model_status => 'Live',105,10,false
+Q1.4 — Single points of failure,,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(:Feature)
+                  -[:USED_IN]->(m:Model)
+WHERE m.status = $model_status
+  AND NOT EXISTS {
+    MATCH (d)-[:SUBSTITUTABLE_FOR]->(:Dataset)
+  }
+RETURN d.name                    AS dataset,
+       d.category                AS category,
+       d.annual_license_cost     AS annual_cost,
+       collect(DISTINCT m.name)  AS dependent_live_models,
+       'No substitute identified' AS risk_flag
+ORDER BY d.annual_license_cost DESC",106,10,false
+⚙️ Set params — Q1.5,,:param min_r_squared => 0.45,107,10,false
+Q1.5 — Feature redundancy map,,"MATCH (f1:Feature)-[c:CORRELATED_WITH]->(f2:Feature)
+WHERE c.r_squared > $min_r_squared
+MATCH (d1:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f1)
+MATCH (d2:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f2)
+RETURN f1.name              AS feature_1,
+       f2.name              AS feature_2,
+       round(c.r_squared * 100) + '%' AS correlation,
+       d1.name              AS source_dataset_1,
+       d2.name              AS source_dataset_2,
+       CASE WHEN d1.id = d2.id THEN 'Same dataset — definite overlap'
+            ELSE 'Different datasets — potential redundancy'
+       END                  AS redundancy_type
+ORDER BY c.r_squared DESC",108,10,false
+⚙️ Set params — Q1.6,,:param vendor_tier => '',109,10,false
+Q1.6 — Vendor exposure,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(:Feature)
+      -[:USED_IN]->(:Model)
+      -[:POWERS]->(s:Strategy)
+WHERE $vendor_tier = '' OR v.tier = $vendor_tier
+RETURN v.name                          AS vendor,
+       v.tier                          AS vendor_tier,
+       collect(DISTINCT d.name)        AS datasets_provided,
+       collect(DISTINCT s.name)        AS strategies_exposed,
+       sum(DISTINCT s.aum_usd_m)       AS total_aum_at_risk_usd_m
+ORDER BY total_aum_at_risk_usd_m DESC",110,10,false
+⚙️ Set params — Q2.1 & Q2.4,,"// Used by Q2.1 and Q2.4
+:param period       => '2024-FY'
+:param model_status => 'Live'",200,20,false
+Q2.1 — Dataset ROI leaderboard,,"MATCH (d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[ui:USED_IN]->(m:Model)
+      -[pw:POWERS]->(s:Strategy)
+      -[:PRODUCES]->(p:PnL)
+WHERE m.status = $model_status
+  AND p.period = $period
+WITH d,
+     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS attributed_pnl_usd_m,
+     count(DISTINCT m)  AS model_count,
+     count(DISTINCT s)  AS strategy_count,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+RETURN d.name                                                         AS dataset,
+       d.category                                                     AS category,
+       round(attributed_pnl_usd_m * 100) / 100                       AS attributed_pnl_usd_m,
+       tcdo_usd                                                       AS total_cost_usd,
+       round((attributed_pnl_usd_m * 1000000) / tcdo_usd * 10) / 10  AS roi_multiple,
+       model_count,
+       strategy_count,
+       d.signal_half_life_days                                        AS signal_half_life_days
+ORDER BY roi_multiple DESC",201,20,false
+⚙️ Set params — Q2.2,,:param model_name => '',202,20,false
+Q2.2 — Feature Shapley attribution per model,,"MATCH (d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[ui:USED_IN]->(m:Model)
+WHERE ui.in_production = true
+  AND ($model_name = '' OR m.name CONTAINS $model_name)
+RETURN m.name                AS model,
+       m.live_sharpe         AS live_sharpe,
+       f.name                AS feature,
+       f.factor_type         AS factor_type,
+       d.name                AS source_dataset,
+       ui.shapley_value      AS shapley_value,
+       ui.importance_rank    AS rank
+ORDER BY m.name, ui.importance_rank",203,20,false
+⚙️ Set params — Q2.3,,"// Used by Q2.3
+:param period        => '2024-FY'
+:param min_cost_usd  => 50000
+:param max_pnl_usd_m => 5.0",204,20,false
+Q2.3 — Underperforming datasets,,"MATCH (d:Dataset)
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[ui:USED_IN]->(m:Model {status: 'Live'})
+               -[pw:POWERS]->(s:Strategy)
+               -[:PRODUCES]->(p:PnL)
+WHERE p.period = $period
+WITH d,
+     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_usd_m,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+WHERE tcdo_usd >= $min_cost_usd
+  AND attributed_pnl_usd_m < $max_pnl_usd_m
+RETURN d.name                                    AS dataset,
+       d.category                                AS category,
+       d.active                                  AS is_active,
+       tcdo_usd                                  AS annual_cost_usd,
+       round(attributed_pnl_usd_m * 100) / 100   AS attributed_pnl_usd_m,
+       'Low ROI' AS flag
+ORDER BY tcdo_usd DESC",205,20,false
+Q2.4 — Dataset ROI by vendor,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[ui:USED_IN]->(m:Model)
+      -[pw:POWERS]->(s:Strategy)
+      -[:PRODUCES]->(p:PnL)
+WHERE m.status = $model_status
+  AND p.period = $period
+WITH v, d,
+     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS dataset_pnl,
+     (d.annual_license_cost + d.ingestion_cost)                  AS dataset_cost
+WITH v,
+     sum(dataset_pnl)   AS total_attributed_pnl_m,
+     sum(dataset_cost)  AS total_vendor_spend,
+     count(DISTINCT d)  AS active_datasets
+RETURN v.name                                                                    AS vendor,
+       v.tier                                                                    AS tier,
+       active_datasets,
+       total_vendor_spend                                                        AS annual_spend_usd,
+       round(total_attributed_pnl_m * 100) / 100                                AS attributed_pnl_usd_m,
+       round((total_attributed_pnl_m * 1000000) / total_vendor_spend * 10) / 10 AS vendor_roi_multiple
+ORDER BY vendor_roi_multiple DESC",206,20,false
+⚙️ Set params — Q2.5,,"// Used by Q2.5
+:param max_half_life_days => 30
+:param model_status       => 'Live'",207,20,false
+Q2.5 — Alpha decay risk,,"MATCH (d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[:USED_IN]->(m:Model)
+      -[:POWERS]->(s:Strategy)
+WHERE m.status = $model_status
+  AND d.signal_half_life_days <= $max_half_life_days
+RETURN d.name                         AS dataset,
+       d.signal_half_life_days        AS half_life_days,
+       d.annual_license_cost          AS license_cost_usd,
+       collect(DISTINCT m.name)       AS live_models,
+       collect(DISTINCT s.name)       AS live_strategies,
+       'Short half-life — monitor alpha decay' AS warning
+ORDER BY d.signal_half_life_days",208,20,false
+⚙️ Set params — Q3.1,,"// Used by Q3.1
+:param days_horizon => 90
+:param today        => '2025-01-01'
+:param period       => '2024-FY'",300,30,false
+Q3.1 — Renewal dashboard,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+WHERE date(prov.renewal_date) <= date($today) + duration({days: $days_horizon})
+  AND date(prov.renewal_date) >= date($today)
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[:USED_IN]->(m:Model {status: 'Live'})
+               -[pw:POWERS]->(s:Strategy)
+               -[:PRODUCES]->(p:PnL)
+WHERE p.period = $period
+OPTIONAL MATCH (d)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WITH v, d, prov,
+     coalesce(sum(DISTINCT pw.signal_weight * p.net_pnl_usd_m), 0) AS approx_pnl_exposure_m,
+     collect(DISTINCT m.name)   AS live_models,
+     collect(DISTINCT s.name)   AS live_strategies,
+     collect(DISTINCT alt.name) AS substitutes,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+RETURN v.name                         AS vendor,
+       d.name                         AS dataset,
+       prov.renewal_date              AS renewal_date,
+       prov.notice_period_days        AS notice_days,
+       prov.auto_renew                AS auto_renews,
+       prov.annual_fee_usd            AS annual_fee_usd,
+       tcdo_usd                       AS total_cost_usd,
+       round(approx_pnl_exposure_m * 100) / 100  AS pnl_exposure_usd_m,
+       size(live_models)              AS live_model_count,
+       live_strategies,
+       CASE WHEN size(substitutes) > 0 THEN substitutes
+            ELSE ['None identified']
+       END                            AS available_substitutes,
+       CASE
+         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) = 0 THEN 'RENEW — critical, no substitute'
+         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) > 0 THEN 'NEGOTIATE — high value but substitute exists'
+         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) > 0 THEN 'CONSIDER DROPPING — low ROI, substitute available'
+         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) = 0 THEN 'REVIEW — low ROI but no substitute'
+         ELSE 'STANDARD RENEWAL'
+       END AS recommendation
+ORDER BY date(prov.renewal_date)",301,30,false
+⚙️ Set params — Q3.2,,"// Used by Q3.2
+:param period       => '2024-FY'
+:param model_status => 'Live'",302,30,false
+Q3.2 — Full contract inventory,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[ui:USED_IN]->(m:Model)
+               -[pw:POWERS]->(s:Strategy)
+               -[:PRODUCES]->(p:PnL)
+WHERE m.status = $model_status
+  AND p.period = $period
+OPTIONAL MATCH (d)-[:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WITH v, d, prov,
+     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_m,
+     count(DISTINCT m) AS model_count,
+     collect(DISTINCT alt.name) AS substitutes,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+RETURN v.name                         AS vendor,
+       d.name                         AS dataset,
+       d.category                     AS category,
+       d.active                       AS active,
+       prov.renewal_date              AS renewal_date,
+       prov.auto_renew                AS auto_renew,
+       prov.notice_period_days        AS notice_days,
+       tcdo_usd                       AS annual_cost_usd,
+       round(attributed_pnl_m * 100) / 100              AS attributed_pnl_usd_m,
+       CASE WHEN tcdo_usd > 0
+            THEN round((attributed_pnl_m * 1000000) / tcdo_usd * 10) / 10
+            ELSE 0
+       END                            AS roi_multiple,
+       model_count                    AS live_models_using,
+       CASE WHEN size(substitutes) > 0 THEN substitutes ELSE ['None'] END AS substitutes,
+       d.mnpi_risk_score              AS mnpi_risk
+ORDER BY prov.renewal_date",303,30,false
+⚙️ Set params — Q3.3,,"// Used by Q3.3
+:param min_mnpi_score => 0.5
+:param model_status   => 'Live'",304,30,false
+Q3.3 — MNPI risk audit,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[:USED_IN]->(m:Model)
+      -[:POWERS]->(s:Strategy)
+WHERE d.mnpi_risk_score >= $min_mnpi_score
+  AND m.status = $model_status
+RETURN d.name                         AS dataset,
+       d.mnpi_risk_score              AS mnpi_risk_score,
+       v.name                         AS vendor,
+       collect(DISTINCT m.name)       AS models_using,
+       collect(DISTINCT s.name)       AS strategies_using,
+       sum(DISTINCT s.aum_usd_m)      AS total_aum_exposed_m,
+       'Compliance review required' AS flag
+ORDER BY d.mnpi_risk_score DESC",305,30,false
+⚙️ Set params — Q3.4,,:param model_status => 'Live',306,30,false
+Q3.4 — Auto-renew exposure,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+WHERE prov.auto_renew = true
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[ui:USED_IN]->(m:Model)
+WHERE m.status = $model_status
+WITH v, d, prov, count(DISTINCT m) AS live_model_count
+RETURN v.name                         AS vendor,
+       d.name                         AS dataset,
+       prov.annual_fee_usd            AS annual_fee_usd,
+       prov.renewal_date              AS auto_renews_on,
+       prov.notice_period_days        AS cancel_by_days_before,
+       live_model_count               AS live_models_using,
+       'Will auto-renew — confirm intent' AS action_required
+ORDER BY prov.annual_fee_usd DESC",307,30,false
+⚙️ Set params — Q3.5,,"// Used by Q3.5
+:param min_overlap_score => 0.4
+:param min_saving_usd    => 50000
+:param model_status      => 'Live'",308,30,false
+Q3.5 — Substitution opportunity map,,"MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WHERE sub.overlap_score >= $min_overlap_score
+  AND sub.cost_delta_usd >= $min_saving_usd
+MATCH (v1:DataVendor)-[:PROVIDES]->(d)
+MATCH (v2:DataVendor)-[:PROVIDES]->(alt)
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(:Feature)
+               -[:USED_IN]->(m:Model)
+WHERE m.status = $model_status
+RETURN d.name                          AS current_dataset,
+       v1.name                         AS current_vendor,
+       d.annual_license_cost           AS current_cost_usd,
+       alt.name                        AS substitute_dataset,
+       v2.name                         AS substitute_vendor,
+       alt.annual_license_cost         AS substitute_cost_usd,
+       sub.cost_delta_usd              AS potential_saving_usd,
+       round(sub.overlap_score * 100) + '%' AS signal_overlap,
+       count(DISTINCT m)               AS live_models_at_risk,
+       CASE WHEN sub.overlap_score >= 0.5 AND sub.cost_delta_usd > 100000
+            THEN 'Strong substitution candidate'
+            ELSE 'Worth evaluating'
+       END                             AS assessment
+ORDER BY sub.cost_delta_usd DESC",309,30,false
+⚙️ Set params — Page 1,,"// Used by all Page 1 queries
+:param neodash_pnl_period   => '2024-FY'
+:param neodash_model_status => ['Live']",410,41,false
+1.1 — PnL Period Selector,,"MATCH (n:PnL)
+WHERE toLower(toString(n.period)) CONTAINS toLower($input)
+RETURN DISTINCT n.period AS value, n.period AS display
+ORDER BY size(toString(value)) ASC
+LIMIT 5",411,41,false
+1.2 — Model Status Selector,,"MATCH (n:Model)
+WHERE toLower(toString(n.status)) CONTAINS toLower($input)
+RETURN DISTINCT n.status AS value, n.status AS display
+ORDER BY size(toString(value)) ASC
+LIMIT 5",412,41,false
+1.3 — Total AUM,,"MATCH (s:Strategy)
+RETURN sum(s.aum_usd_m) AS Total_AUM_USD_M",413,41,false
+1.4 — Total Annual Data Spend,,"MATCH (d:Dataset)
+WHERE d.active = true
+RETURN sum(d.annual_license_cost + d.ingestion_cost) AS Annual_Data_Spend_USD",414,41,false
+1.5 — Live Model Count,,"MATCH (m:Model)
+WHERE m.status IN $neodash_model_status
+RETURN count(m) AS Live_Models",415,41,false
+1.6 — Live Model Scorecard,,"MATCH (m:Model)
+WHERE m.status IN $neodash_model_status
+OPTIONAL MATCH (f:Feature)-[ui:USED_IN]->(m)
+WHERE ui.in_production = true
+WITH m, count(DISTINCT f) AS features_in_production
+RETURN m.name                                             AS model,
+       m.model_type                                       AS type,
+       m.asset_class                                      AS asset_class,
+       m.backtest_sharpe                                  AS backtest_sharpe,
+       m.live_sharpe                                      AS live_sharpe,
+       round((m.backtest_sharpe - m.live_sharpe) * 100) / 100 AS sharpe_decay,
+       features_in_production,
+       m.inception_year                                   AS live_since
+ORDER BY m.live_sharpe DESC",416,41,false
+1.7 — Strategy AUM,,"MATCH (s:Strategy)
+RETURN s.name      AS strategy,
+       s.aum_usd_m AS aum_usd_m
+ORDER BY s.aum_usd_m DESC",417,41,false
+1.8 — Strategy PnL,,"MATCH (s:Strategy)-[:PRODUCES]->(p:PnL)
+WHERE p.period = $neodash_pnl_period
+RETURN s.name              AS strategy,
+       s.approach           AS approach,
+       s.aum_usd_m          AS aum_usd_m,
+       p.gross_pnl_usd_m    AS gross_pnl_usd_m,
+       p.net_pnl_usd_m      AS net_pnl_usd_m,
+       p.sharpe             AS period_sharpe,
+       p.max_drawdown_pct   AS max_drawdown_pct
+ORDER BY p.net_pnl_usd_m DESC",418,41,false
+⚙️ Set params — Page 2,,"// Used by all Page 2 queries
+:param neodash_today        => '2025-01-01'
+:param neodash_days_horizon => 90
+:param neodash_pnl_period   => '2024-FY'
+:param neodash_model_status => ['Live']",420,42,false
+2.1 — Reference Date Selector,,"RETURN true",421,42,false
+2.2 — Lookahead Window,,"RETURN coalesce(toInteger($input), 90)",422,42,false
+2.3 — Renewal Dashboard,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+WHERE date(prov.renewal_date) >= date($neodash_today)
+  AND date(prov.renewal_date) <= date($neodash_today) + duration({days: toInteger($neodash_days_horizon)})
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[:USED_IN]->(m:Model {status: 'Live'})
+               -[pw:POWERS]->(s:Strategy)
+               -[:PRODUCES]->(p:PnL)
+WHERE p.period = $neodash_pnl_period
+OPTIONAL MATCH (d)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WITH v, d, prov,
+     coalesce(sum(DISTINCT pw.signal_weight * p.net_pnl_usd_m), 0) AS approx_pnl_exposure_m,
+     collect(DISTINCT m.name)   AS live_models,
+     collect(DISTINCT s.name)   AS live_strategies,
+     collect(DISTINCT alt.name) AS substitutes,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+RETURN v.name                  AS vendor,
+       d.name                  AS dataset,
+       prov.renewal_date       AS renewal_date,
+       prov.notice_period_days AS notice_days,
+       prov.auto_renew         AS auto_renews,
+       prov.annual_fee_usd     AS annual_fee_usd,
+       tcdo_usd                AS total_cost_usd,
+       round(approx_pnl_exposure_m * 100) / 100 AS pnl_exposure_usd_m,
+       size(live_models)       AS live_model_count,
+       live_strategies,
+       CASE WHEN size(substitutes) > 0 THEN substitutes
+            ELSE ['None identified']
+       END                     AS available_substitutes,
+       CASE
+         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) = 0 THEN 'RENEW — critical, no substitute'
+         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) > 0 THEN 'NEGOTIATE — high value, substitute exists'
+         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) > 0 THEN 'CONSIDER DROPPING — low ROI, substitute available'
+         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) = 0 THEN 'REVIEW — low ROI, no substitute'
+         ELSE 'STANDARD RENEWAL'
+       END                     AS recommendation
+ORDER BY date(prov.renewal_date)",423,42,false
+2.4 — Auto-renew Exposure,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+WHERE prov.auto_renew = true
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[:USED_IN]->(m:Model)
+WHERE m.status IN $neodash_model_status
+WITH v, d, prov, count(DISTINCT m) AS live_model_count
+RETURN v.name                 AS vendor,
+       d.name                 AS dataset,
+       prov.annual_fee_usd    AS annual_fee_usd,
+       prov.renewal_date      AS auto_renews_on,
+       prov.notice_period_days AS cancel_by_days_before,
+       live_model_count,
+       'Will auto-renew — confirm intent' AS action_required
+ORDER BY prov.annual_fee_usd DESC",424,42,false
+2.5 — Top Datasets by Total Cost,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+OPTIONAL MATCH (d)-[:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WITH d, v, collect(alt.name) AS substitutes
+RETURN d.name                AS dataset,
+       v.name                AS vendor,
+       (d.annual_license_cost + d.ingestion_cost) AS total_cost_usd,
+       CASE WHEN size(substitutes) > 0 THEN 'Has substitute' ELSE 'No substitute' END AS has_substitute
+ORDER BY total_cost_usd DESC
+LIMIT 15",425,42,false
+2.6 — Substitution Opportunity Map,,"MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WHERE sub.overlap_score >= 0.4
+  AND sub.cost_delta_usd >= 50000
+MATCH (v1:DataVendor)-[:PROVIDES]->(d)
+MATCH (v2:DataVendor)-[:PROVIDES]->(alt)
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(:Feature)
+               -[:USED_IN]->(m:Model {status: 'Live'})
+RETURN d.name                 AS current_dataset,
+       v1.name                AS current_vendor,
+       d.annual_license_cost  AS current_cost_usd,
+       alt.name               AS substitute_dataset,
+       v2.name                AS substitute_vendor,
+       alt.annual_license_cost AS substitute_cost_usd,
+       sub.cost_delta_usd     AS potential_saving_usd,
+       round(sub.overlap_score * 100) + '%' AS signal_overlap,
+       count(DISTINCT m)      AS live_models_at_risk,
+       CASE
+         WHEN sub.overlap_score >= 0.5 AND sub.cost_delta_usd > 100000 THEN 'Strong substitution candidate'
+         ELSE 'Worth evaluating'
+       END                    AS assessment
+ORDER BY sub.cost_delta_usd DESC",426,42,false
+⚙️ Set params — Page 3,,"// Used by all Page 3 queries
+:param neodash_pnl_period   => '2024-FY'
+:param neodash_model_status => ['Live']",430,43,false
+3.1 — Dataset ROI Leaderboard,,"MATCH (d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[ui:USED_IN]->(m:Model)
+      -[pw:POWERS]->(s:Strategy)
+      -[:PRODUCES]->(p:PnL)
+WHERE m.status IN $neodash_model_status
+  AND p.period = $neodash_pnl_period
+WITH d,
+     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS attributed_pnl_usd_m,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+RETURN d.name AS dataset,
+       round((attributed_pnl_usd_m * 1000000) / tcdo_usd * 10) / 10 AS roi_multiple
+ORDER BY roi_multiple DESC
+LIMIT 12",431,43,false
+3.2 — Full Dataset ROI Table,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[ui:USED_IN]->(m:Model)
+               -[pw:POWERS]->(s:Strategy)
+               -[:PRODUCES]->(p:PnL)
+WHERE m.status IN $neodash_model_status
+  AND p.period = $neodash_pnl_period
+OPTIONAL MATCH (d)-[:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WITH v, d,
+     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_m,
+     count(DISTINCT m) AS model_count,
+     collect(DISTINCT alt.name) AS substitutes,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+RETURN v.name    AS vendor,
+       d.name    AS dataset,
+       d.category AS category,
+       tcdo_usd  AS annual_cost_usd,
+       round(attributed_pnl_m * 100) / 100 AS attributed_pnl_usd_m,
+       CASE WHEN tcdo_usd > 0
+            THEN round((attributed_pnl_m * 1000000) / tcdo_usd * 10) / 10
+            ELSE 0
+       END       AS roi_multiple,
+       model_count AS live_models_using,
+       CASE WHEN size(substitutes) > 0 THEN substitutes ELSE ['None'] END AS substitutes,
+       d.mnpi_risk_score AS mnpi_risk,
+       d.signal_half_life_days AS half_life_days
+ORDER BY roi_multiple DESC",432,43,false
+3.3 — Vendor ROI Summary,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[ui:USED_IN]->(m:Model)
+      -[pw:POWERS]->(s:Strategy)
+      -[:PRODUCES]->(p:PnL)
+WHERE m.status IN $neodash_model_status
+  AND p.period = $neodash_pnl_period
+WITH v,
+     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS total_pnl_m,
+     sum(DISTINCT (d.annual_license_cost + d.ingestion_cost))    AS total_spend,
+     count(DISTINCT d) AS datasets
+RETURN v.name  AS vendor,
+       v.tier  AS tier,
+       datasets,
+       total_spend AS annual_spend_usd,
+       round(total_pnl_m * 100) / 100 AS attributed_pnl_usd_m,
+       round((total_pnl_m * 1000000) / total_spend * 10) / 10 AS vendor_roi_multiple
+ORDER BY vendor_roi_multiple DESC",433,43,false
+3.4 — Feature Shapley Attribution,,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[ui:USED_IN]->(m:Model)
+WHERE ui.in_production = true
+  AND m.status IN $neodash_model_status
+RETURN f.name         AS feature,
+       f.factor_type  AS factor_type,
+       d.name         AS source_dataset,
+       m.name         AS model,
+       ui.shapley_value AS shapley_value,
+       ui.importance_rank AS rank
+ORDER BY ui.shapley_value DESC
+LIMIT 20",434,43,false
+3.5 — Underperforming Datasets,,"MATCH (d:Dataset)
+OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
+               -[:GENERATES]->(f:Feature)
+               -[ui:USED_IN]->(m:Model {status: 'Live'})
+               -[pw:POWERS]->(s:Strategy)
+               -[:PRODUCES]->(p:PnL)
+WHERE p.period = $neodash_pnl_period
+WITH d,
+     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_m,
+     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd
+WHERE tcdo_usd >= 50000
+  AND attributed_pnl_m < 5.0
+RETURN d.name    AS dataset,
+       d.category AS category,
+       d.active  AS is_active,
+       tcdo_usd  AS annual_cost_usd,
+       round(attributed_pnl_m * 100) / 100 AS attributed_pnl_usd_m,
+       'Low ROI — review or drop' AS flag
+ORDER BY tcdo_usd DESC",435,43,false
+⚙️ Set params — Page 4,,"// Used by all Page 4 queries
+:param neodash_model_status => ['Live']",440,44,false
+4.1 — High-MNPI Dataset Count (KPI),,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(:Feature)
+      -[:USED_IN]->(m:Model {status: 'Live'})
+WHERE d.mnpi_risk_score >= 0.5
+RETURN count(DISTINCT d) AS High_MNPI_Datasets",441,44,false
+4.2 — AUM Exposed to High-MNPI Data (KPI),,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(:Feature)
+      -[:USED_IN]->(m:Model {status: 'Live'})
+      -[:POWERS]->(s:Strategy)
+WHERE d.mnpi_risk_score >= 0.5
+RETURN sum(DISTINCT s.aum_usd_m) AS AUM_Exposed_to_MNPI_USD_M",442,44,false
+4.3 — MNPI Risk Audit,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+      -[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[:USED_IN]->(m:Model)
+      -[:POWERS]->(s:Strategy)
+WHERE d.mnpi_risk_score >= 0.5
+  AND m.status IN $neodash_model_status
+RETURN d.name                          AS dataset,
+       d.mnpi_risk_score               AS mnpi_risk_score,
+       v.name                          AS vendor,
+       collect(DISTINCT m.name)        AS models_using,
+       collect(DISTINCT s.name)        AS strategies_using,
+       sum(DISTINCT s.aum_usd_m)       AS total_aum_exposed_m,
+       'Compliance review required'    AS flag
+ORDER BY d.mnpi_risk_score DESC",443,44,false
+4.4 — Single Points of Failure,,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(:Feature)
+      -[:USED_IN]->(m:Model)
+WHERE m.status IN $neodash_model_status
+  AND NOT EXISTS { MATCH (d)-[:SUBSTITUTABLE_FOR]->(:Dataset) }
+WITH d, collect(DISTINCT m.name) AS dependent_models
+RETURN d.name                AS dataset,
+       d.category            AS category,
+       d.annual_license_cost AS license_cost_usd,
+       d.mnpi_risk_score     AS mnpi_risk,
+       dependent_models,
+       size(dependent_models) AS model_count,
+       'No substitute identified' AS risk_flag
+ORDER BY d.annual_license_cost DESC",444,44,false
+4.5 — Correlated Feature Pairs,,"MATCH (f1:Feature)-[c:CORRELATED_WITH]->(f2:Feature)
+WHERE c.r_squared > 0.45
+MATCH (d1:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f1)
+MATCH (d2:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f2)
+MATCH (m:Model {status: 'Live'})
+WHERE (f1)-[:USED_IN]->(m) AND (f2)-[:USED_IN]->(m)
+RETURN m.name    AS model,
+       f1.name   AS feature_1,
+       f2.name   AS feature_2,
+       round(c.r_squared * 100) + '%' AS r_squared,
+       d1.name   AS source_dataset_1,
+       d2.name   AS source_dataset_2,
+       CASE WHEN d1.name = d2.name
+            THEN 'Same dataset — definite overlap'
+            ELSE 'Different datasets — potential redundancy'
+       END       AS redundancy_type,
+       c.detected_date AS detected
+ORDER BY c.r_squared DESC",445,44,false
+4.6 — Alpha Decay Watch,,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[:USED_IN]->(m:Model {status: 'Live'})
+      -[:POWERS]->(s:Strategy)
+WHERE d.signal_half_life_days <= 30
+RETURN d.name                    AS dataset,
+       d.signal_half_life_days   AS half_life_days,
+       d.annual_license_cost     AS license_cost_usd,
+       collect(DISTINCT m.name)  AS live_models,
+       collect(DISTINCT s.name)  AS live_strategies,
+       'Short half-life — monitor alpha decay' AS warning
+ORDER BY d.signal_half_life_days",446,44,false
+⚙️ Set params — Page 5,,"// Used by all Page 5 queries
+:param neodash_dataset_name  => 'Consumer Credit Card Spend - US'
+:param neodash_pnl_period    => '2024-FY'
+:param neodash_model_status  => ['Live']",450,45,false
+5.6 — Dataset Selector,,"MATCH (n:Dataset)
+WHERE toLower(toString(n.name)) CONTAINS toLower($input)
+RETURN DISTINCT n.name AS value, n.name AS display
+ORDER BY size(toString(value)) ASC
+LIMIT 5",451,45,false
+5.1 — Dataset Profile,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+WHERE d.name = $neodash_dataset_name
+RETURN d.name                  AS dataset,
+       v.name                  AS vendor,
+       v.tier                  AS vendor_tier,
+       d.category              AS category,
+       d.asset_class_coverage  AS asset_class,
+       d.annual_license_cost   AS license_cost_usd,
+       d.ingestion_cost        AS ingestion_cost_usd,
+       (d.annual_license_cost + d.ingestion_cost) AS total_cost_usd,
+       d.mnpi_risk_score       AS mnpi_risk,
+       d.signal_half_life_days AS half_life_days,
+       d.refresh_frequency     AS refresh,
+       prov.renewal_date       AS renewal_date,
+       prov.auto_renew         AS auto_renews,
+       prov.notice_period_days AS notice_days,
+       prov.annual_fee_usd     AS contracted_fee_usd,
+       d.active                AS active",452,45,false
+5.2 — Full Lineage Graph,,"MATCH path = (d:Dataset)-[:FEEDS]->(fp:FeaturePipeline)
+             -[:GENERATES]->(f:Feature)
+             -[:USED_IN]->(m:Model)
+             -[:POWERS]->(s:Strategy)
+             -[:PRODUCES]->(p:PnL)
+WHERE d.name = $neodash_dataset_name
+  AND p.period = $neodash_pnl_period
+RETURN path",453,45,false
+5.3 — Blast Radius,,"MATCH (d:Dataset)-[:FEEDS]->(fp:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[:USED_IN]->(m:Model)
+      -[:POWERS]->(s:Strategy)
+WHERE d.name = $neodash_dataset_name
+  AND m.status IN $neodash_model_status
+RETURN d.name                      AS at_risk_dataset,
+       collect(DISTINCT fp.name)   AS affected_pipelines,
+       collect(DISTINCT f.name)    AS affected_features,
+       collect(DISTINCT m.name)    AS affected_models,
+       collect(DISTINCT s.name)    AS affected_strategies,
+       count(DISTINCT s)           AS strategy_count",454,45,false
+5.4 — Feature Attribution for Dataset,,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)
+      -[:GENERATES]->(f:Feature)
+      -[ui:USED_IN]->(m:Model)
+WHERE d.name = $neodash_dataset_name
+  AND ui.in_production = true
+  AND m.status IN $neodash_model_status
+RETURN f.name          AS feature,
+       f.factor_type   AS factor_type,
+       m.name          AS model,
+       ui.shapley_value AS shapley_value,
+       ui.importance_rank AS rank
+ORDER BY ui.shapley_value DESC",455,45,false
+5.5 — Substitutes Available,,"MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)
+WHERE d.name = $neodash_dataset_name
+MATCH (v2:DataVendor)-[:PROVIDES]->(alt)
+RETURN alt.name                AS substitute_dataset,
+       v2.name                 AS substitute_vendor,
+       alt.annual_license_cost AS substitute_cost_usd,
+       sub.cost_delta_usd      AS potential_saving_usd,
+       round(sub.overlap_score * 100) + '%' AS signal_overlap,
+       CASE
+         WHEN sub.overlap_score >= 0.5 AND sub.cost_delta_usd > 100000
+              THEN 'Strong candidate'
+         ELSE 'Worth evaluating'
+       END                     AS assessment
+ORDER BY sub.overlap_score DESC",456,45,false
+⚙️ Set param — $date,,:param date => '2025-06-01',510,51,false
+Bloom: Renewals before $date — autocomplete helper,,"// Add this to the $date parameter autocomplete in Bloom
+MATCH ()-[prov:PROVIDES]->()
+WITH DISTINCT prov.renewal_date AS date
+ORDER BY date
+RETURN date",511,51,false
+Bloom: Renewals before $date,,"MATCH path = (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
+WHERE date(prov.renewal_date) <= date($date)
+  AND date(prov.renewal_date) >= date('2025-01-01')
+RETURN path",512,51,false
+⚙️ Set param — $score,,:param score => '0.5',513,51,false
+Bloom: Datasets with MNPI risk above $score,,"MATCH path = (:DataVendor)-[:PROVIDES]->(d:Dataset)
+             -[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(m:Model)
+WHERE d.mnpi_risk_score >= toFloat($score)
+  AND m.status = 'Live'
+RETURN path",514,51,false
+⚙️ Set param — $threshold,,:param threshold => '1.5',515,51,false
+Bloom: Live models with Sharpe below $threshold,,"MATCH path = (:Dataset)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(m:Model)
+WHERE m.status = 'Live'
+  AND m.live_sharpe < toFloat($threshold)
+RETURN path",516,51,false
+⚙️ Set param — $budget,,:param budget => '100000',517,51,false
+Bloom: Datasets costing more than $budget USD,,"MATCH path = (v:DataVendor)-[:PROVIDES]->(d:Dataset)
+WHERE (d.annual_license_cost + d.ingestion_cost) >= toInteger($budget)
+RETURN path",518,51,false
+Bloom Scene: Dataset — Full path to PnL,,"// Bloom scene action on Dataset node
+// $nodes is injected by Bloom — not runnable in Neo4j Browser
+UNWIND $nodes AS eid
+MATCH path = (ds:Dataset WHERE elementId(ds)=eid)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(:Model)
+             -[:POWERS]->(:Strategy)
+             -[:PRODUCES]->(:PnL)
+RETURN path",520,52,false
+Bloom Scene: Dataset — What breaks if I lose,,"// Bloom scene action on Dataset node
+UNWIND $nodes AS eid
+MATCH path = (ds:Dataset WHERE elementId(ds)=eid)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(m:Model)
+             -[:POWERS]->(:Strategy)
+WHERE m.status = 'Live'
+RETURN path",521,52,false
+Bloom Scene: DataVendor — Show full exposure,,"// Bloom scene action on DataVendor node
+UNWIND $nodes AS eid
+MATCH path = (dv:DataVendor WHERE elementId(dv)=eid)-[:PROVIDES]->(:Dataset)
+             -[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(:Feature)
+             -[:USED_IN]->(m:Model)
+WHERE m.status = 'Live'
+RETURN path",522,52,false
+Bloom Scene: Model — Features driving,,"// Bloom scene action on Model node
+UNWIND $nodes AS eid
+MATCH path = (:Dataset)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(f:Feature)
+             -[r:USED_IN]->(m:Model WHERE elementId(m)=eid)
+WHERE r.in_production = true
+RETURN path",523,52,false
+Bloom Scene: Model — Show correlated features,,"// Bloom scene action on Model node
+UNWIND $nodes AS eid
+MATCH (m:Model WHERE elementId(m)=eid)
+MATCH path = (:Dataset)-[:FEEDS]->(:FeaturePipeline)
+             -[:GENERATES]->(f1:Feature)-[r:CORRELATED_WITH]->(f2:Feature)
+             <-[:GENERATES]-(:FeaturePipeline)<-[:FEEDS]-(:Dataset)
+WHERE (f1)-[:USED_IN]->(m) AND (f2)-[:USED_IN]->(m)
+  AND r.r_squared > 0.45
+RETURN path",524,52,false
+Bloom Scene: Strategy — Show PnL history,,"// Bloom scene action on Strategy node
+UNWIND $nodes AS eid
+MATCH path = (s:Strategy WHERE elementId(s)=eid)-[:PRODUCES]->(p:PnL)
+RETURN path",525,52,false
