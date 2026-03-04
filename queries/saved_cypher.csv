@@ -93,9 +93,7 @@ RETURN v.name                          AS vendor,
        collect(DISTINCT s.name)        AS strategies_exposed,
        sum(DISTINCT s.aum_usd_m)       AS total_aum_at_risk_usd_m
 ORDER BY total_aum_at_risk_usd_m DESC",110,10,false
-⚙️ Set params — Q2.1 & Q2.4,,"// Used by Q2.1 and Q2.4
-:param period       => '2024-FY'
-:param model_status => 'Live'",200,20,false
+⚙️ Set params — Q2.1 & Q2.4,,":params {period: '2024-FY', model_status: 'Live'}",200,20,false
 Q2.1 — Dataset ROI leaderboard,,"MATCH (d:Dataset)
       -[:FEEDS]->(:FeaturePipeline)
       -[:GENERATES]->(f:Feature)
@@ -133,10 +131,7 @@ RETURN m.name                AS model,
        ui.shapley_value      AS shapley_value,
        ui.importance_rank    AS rank
 ORDER BY m.name, ui.importance_rank",203,20,false
-⚙️ Set params — Q2.3,,"// Used by Q2.3
-:param period        => '2024-FY'
-:param min_cost_usd  => 50000
-:param max_pnl_usd_m => 5.0",204,20,false
+⚙️ Set params — Q2.3,,":params {period: '2024-FY', min_cost_usd: 50000, max_pnl_usd_m: 5.0}",204,20,false
 Q2.3 — Underperforming datasets,,"MATCH (d:Dataset)
 OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
                -[:GENERATES]->(f:Feature)
@@ -178,9 +173,7 @@ RETURN v.name                                                                   
        round(total_attributed_pnl_m * 100) / 100                                AS attributed_pnl_usd_m,
        round((total_attributed_pnl_m * 1000000) / total_vendor_spend * 10) / 10 AS vendor_roi_multiple
 ORDER BY vendor_roi_multiple DESC",206,20,false
-⚙️ Set params — Q2.5,,"// Used by Q2.5
-:param max_half_life_days => 30
-:param model_status       => 'Live'",207,20,false
+⚙️ Set params — Q2.5,,":params {max_half_life_days: 30, model_status: 'Live'}",207,20,false
 Q2.5 — Alpha decay risk,,"MATCH (d:Dataset)
       -[:FEEDS]->(:FeaturePipeline)
       -[:GENERATES]->(f:Feature)
@@ -195,10 +188,7 @@ RETURN d.name                         AS dataset,
        collect(DISTINCT s.name)       AS live_strategies,
        'Short half-life — monitor alpha decay' AS warning
 ORDER BY d.signal_half_life_days",208,20,false
-⚙️ Set params — Q3.1,,"// Used by Q3.1
-:param days_horizon => 90
-:param today        => '2025-01-01'
-:param period       => '2024-FY'",300,30,false
+⚙️ Set params — Q3.1,,":params {days_horizon: 90, today: '2025-01-01', period: '2024-FY'}",300,30,false
 Q3.1 — Renewal dashboard,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
 WHERE date(prov.renewal_date) <= date($today) + duration({days: $days_horizon})
   AND date(prov.renewal_date) >= date($today)
@@ -236,9 +226,7 @@ RETURN v.name                         AS vendor,
          ELSE 'STANDARD RENEWAL'
        END AS recommendation
 ORDER BY date(prov.renewal_date)",301,30,false
-⚙️ Set params — Q3.2,,"// Used by Q3.2
-:param period       => '2024-FY'
-:param model_status => 'Live'",302,30,false
+⚙️ Set params — Q3.2,,":params {period: '2024-FY', model_status: 'Live'}",302,30,false
 Q3.2 — Full contract inventory,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
 OPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)
                -[:GENERATES]->(f:Feature)
@@ -270,9 +258,7 @@ RETURN v.name                         AS vendor,
        CASE WHEN size(substitutes) > 0 THEN substitutes ELSE ['None'] END AS substitutes,
        d.mnpi_risk_score              AS mnpi_risk
 ORDER BY prov.renewal_date",303,30,false
-⚙️ Set params — Q3.3,,"// Used by Q3.3
-:param min_mnpi_score => 0.5
-:param model_status   => 'Live'",304,30,false
+⚙️ Set params — Q3.3,,":params {min_mnpi_score: 0.5, model_status: 'Live'}",304,30,false
 Q3.3 — MNPI risk audit,,"MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)
       -[:FEEDS]->(:FeaturePipeline)
       -[:GENERATES]->(f:Feature)
@@ -304,10 +290,7 @@ RETURN v.name                         AS vendor,
        live_model_count               AS live_models_using,
        'Will auto-renew — confirm intent' AS action_required
 ORDER BY prov.annual_fee_usd DESC",307,30,false
-⚙️ Set params — Q3.5,,"// Used by Q3.5
-:param min_overlap_score => 0.4
-:param min_saving_usd    => 50000
-:param model_status      => 'Live'",308,30,false
+⚙️ Set params — Q3.5,,":params {min_overlap_score: 0.4, min_saving_usd: 50000, model_status: 'Live'}",308,30,false
 Q3.5 — Substitution opportunity map,,"MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)
 WHERE sub.overlap_score >= $min_overlap_score
   AND sub.cost_delta_usd >= $min_saving_usd
@@ -330,9 +313,7 @@ RETURN d.name                          AS current_dataset,
             ELSE 'Worth evaluating'
        END                             AS assessment
 ORDER BY sub.cost_delta_usd DESC",309,30,false
-⚙️ Set params — Page 1,,"// Used by all Page 1 queries
-:param neodash_pnl_period   => '2024-FY'
-:param neodash_model_status => ['Live']",410,41,false
+⚙️ Set params — Page 1,,":params {neodash_pnl_period: '2024-FY', neodash_model_status: ['Live']}",410,41,false
 1.1 — PnL Period Selector,,"MATCH (n:PnL)
 WHERE toLower(toString(n.period)) CONTAINS toLower($input)
 RETURN DISTINCT n.period AS value, n.period AS display
@@ -379,11 +360,7 @@ RETURN s.name              AS strategy,
        p.sharpe             AS period_sharpe,
        p.max_drawdown_pct   AS max_drawdown_pct
 ORDER BY p.net_pnl_usd_m DESC",418,41,false
-⚙️ Set params — Page 2,,"// Used by all Page 2 queries
-:param neodash_today        => '2025-01-01'
-:param neodash_days_horizon => 90
-:param neodash_pnl_period   => '2024-FY'
-:param neodash_model_status => ['Live']",420,42,false
+⚙️ Set params — Page 2,,":params {neodash_today: '2025-01-01', neodash_days_horizon: 90, neodash_pnl_period: '2024-FY', neodash_model_status: ['Live']}",420,42,false
 2.1 — Reference Date Selector,,"RETURN true",421,42,false
 2.2 — Lookahead Window,,"RETURN coalesce(toInteger($input), 90)",422,42,false
 2.3 — Renewal Dashboard,,"MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)
@@ -468,9 +445,7 @@ RETURN d.name                 AS current_dataset,
          ELSE 'Worth evaluating'
        END                    AS assessment
 ORDER BY sub.cost_delta_usd DESC",426,42,false
-⚙️ Set params — Page 3,,"// Used by all Page 3 queries
-:param neodash_pnl_period   => '2024-FY'
-:param neodash_model_status => ['Live']",430,43,false
+⚙️ Set params — Page 3,,":params {neodash_pnl_period: '2024-FY', neodash_model_status: ['Live']}",430,43,false
 3.1 — Dataset ROI Leaderboard,,"MATCH (d:Dataset)
       -[:FEEDS]->(:FeaturePipeline)
       -[:GENERATES]->(f:Feature)
@@ -565,8 +540,7 @@ RETURN d.name    AS dataset,
        round(attributed_pnl_m * 100) / 100 AS attributed_pnl_usd_m,
        'Low ROI — review or drop' AS flag
 ORDER BY tcdo_usd DESC",435,43,false
-⚙️ Set params — Page 4,,"// Used by all Page 4 queries
-:param neodash_model_status => ['Live']",440,44,false
+⚙️ Set params — Page 4,,:params {neodash_model_status: ['Live']},440,44,false
 4.1 — High-MNPI Dataset Count (KPI),,"MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)
       -[:GENERATES]->(:Feature)
       -[:USED_IN]->(m:Model {status: 'Live'})
@@ -637,10 +611,7 @@ RETURN d.name                    AS dataset,
        collect(DISTINCT s.name)  AS live_strategies,
        'Short half-life — monitor alpha decay' AS warning
 ORDER BY d.signal_half_life_days",446,44,false
-⚙️ Set params — Page 5,,"// Used by all Page 5 queries
-:param neodash_dataset_name  => 'Consumer Credit Card Spend - US'
-:param neodash_pnl_period    => '2024-FY'
-:param neodash_model_status  => ['Live']",450,45,false
+⚙️ Set params — Page 5,,":params {neodash_dataset_name: 'Consumer Credit Card Spend - US', neodash_pnl_period: '2024-FY', neodash_model_status: ['Live']}",450,45,false
 5.6 — Dataset Selector,,"MATCH (n:Dataset)
 WHERE toLower(toString(n.name)) CONTAINS toLower($input)
 RETURN DISTINCT n.name AS value, n.name AS display
