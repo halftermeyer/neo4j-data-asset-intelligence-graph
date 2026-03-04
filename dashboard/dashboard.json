@@ -1,0 +1,1182 @@
+{
+  "uuid": "a9727f2d-ea57-48d3-8b1d-e5b32697beac",
+  "title": "Data Asset Intelligence",
+  "version": "3.3",
+  "settings": {
+    "pagenumber": 4,
+    "editable": true,
+    "fullscreenEnabled": false,
+    "parameters": {
+      "neodash_pnl_period": "2024-FY",
+      "neodash_pnl_period_display": "2024-FY",
+      "neodash_model_status": [
+        "Live"
+      ],
+      "neodash_model_status_display": [
+        "Live"
+      ],
+      "neodash_today": {
+        "year": 2025,
+        "month": 1,
+        "day": 1
+      },
+      "neodash_days_horizon": {
+        "low": 90,
+        "high": 0
+      },
+      "neodash_days_horizon_display": "90",
+      "neodash_dataset": "Earnings Call NLP Sentiment",
+      "neodash_dataset_name": "Job Posting Velocity by Sector",
+      "neodash_dataset_name_display": "Job Posting Velocity by Sector"
+    },
+    "theme": "light"
+  },
+  "pages": [
+    {
+      "title": "Portfolio Overview",
+      "reports": [
+        {
+          "id": "5060f801-8b37-4f9b-a777-ad88bca31fbd",
+          "title": "PnL Period Selector",
+          "query": "\nMATCH (n:`PnL`)\nWHERE toLower(toString(n.`period`)) CONTAINS toLower($input)\nRETURN DISTINCT n.`period` AS value, n.`period` AS display\nORDER BY size(toString(value)) ASC\nLIMIT 5\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 6,
+          "height": 2,
+          "x": 6,
+          "y": 4,
+          "type": "select",
+          "fields": [
+            "value",
+            "display"
+          ],
+          "selection": {},
+          "settings": {
+            "type": "Node Property",
+            "entityType": "PnL",
+            "propertyType": "period",
+            "propertyTypeDisplay": "period",
+            "parameterName": "neodash_pnl_period"
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022955,
+          "schema": []
+        },
+        {
+          "id": "5b66735e-0c51-4db8-be76-826f3de5873c",
+          "title": "Model Status Selector",
+          "query": "\nMATCH (n:`Model`)\nWHERE toLower(toString(n.`status`)) CONTAINS toLower($input)\nRETURN DISTINCT n.`status` AS value, n.`status` AS display\nORDER BY size(toString(value)) ASC\nLIMIT 5\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": true,
+          "width": 6,
+          "height": 2,
+          "x": 6,
+          "y": 2,
+          "type": "select",
+          "fields": [
+            "value",
+            "display"
+          ],
+          "selection": {},
+          "settings": {
+            "type": "Node Property",
+            "entityType": "Model",
+            "propertyType": "status",
+            "propertyTypeDisplay": "status",
+            "parameterName": "neodash_model_status",
+            "multiSelector": true
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022955,
+          "schema": []
+        },
+        {
+          "id": "264bf136-45a7-4023-aea1-fbe1f6488caa",
+          "title": "Total AUM across all live strategies",
+          "query": "MATCH (s:Strategy)\nRETURN sum(s.aum_usd_m) AS Total_AUM_USD_M",
+          "settingsOpen": false,
+          "advancedSettingsOpen": true,
+          "width": 6,
+          "height": 2,
+          "x": 0,
+          "y": 4,
+          "type": "value",
+          "fields": [
+            "Total_AUM_USD_M"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022955,
+          "schema": []
+        },
+        {
+          "id": "e287be73-73b2-46f8-bb06-c24e9fa2a932",
+          "title": "Sum of license + ingestion cost across all active datasets.",
+          "query": "MATCH (d:Dataset)\nWHERE d.active = true\nRETURN sum(d.annual_license_cost + d.ingestion_cost) AS Annual_Data_Spend_USD\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 6,
+          "height": 2,
+          "x": 0,
+          "y": 2,
+          "type": "value",
+          "fields": [
+            "Annual_Data_Spend_USD"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022955,
+          "schema": []
+        },
+        {
+          "id": "23e83785-9a5d-4fcb-a75b-5f591ee8697f",
+          "title": "Model Count",
+          "query": "MATCH (m:Model WHERE m.status IN $neodash_model_status)\nRETURN count(m) AS Live_Models\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 4,
+          "height": 2,
+          "x": 0,
+          "y": 6,
+          "type": "value",
+          "fields": [
+            "Live_Models"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022955,
+          "schema": []
+        },
+        {
+          "id": "6959ae44-f0b1-4d0e-867e-c9d4e15df596",
+          "title": "Per-model Sharpe comparison and decay between backtest and live",
+          "query": "MATCH (m:Model)\nWHERE m.status IN $neodash_model_status\nOPTIONAL MATCH (f:Feature)-[ui:USED_IN]->(m)\nWHERE ui.in_production = true\nWITH m, count(DISTINCT f) AS features_in_production\nRETURN m.name                                             AS model,\n       m.model_type                                       AS type,\n       m.asset_class                                      AS asset_class,\n       m.backtest_sharpe                                  AS backtest_sharpe,\n       m.live_sharpe                                      AS live_sharpe,\n       round((m.backtest_sharpe - m.live_sharpe) * 100) / 100 AS sharpe_decay,\n       features_in_production,\n       m.inception_year                                   AS live_since\nORDER BY m.live_sharpe DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 10,
+          "height": 4,
+          "x": 12,
+          "y": 4,
+          "type": "table",
+          "fields": [
+            "model",
+            "type",
+            "asset_class",
+            "backtest_sharpe",
+            "live_sharpe",
+            "sharpe_decay",
+            "features_in_production",
+            "live_since"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022955
+        },
+        {
+          "id": "4c92ca58-5db9-4812-9435-c47b04918a07",
+          "title": "Strategy PnL",
+          "query": "MATCH (s:Strategy)-[:PRODUCES]->(p:PnL)\nWHERE p.period = $neodash_pnl_period\nRETURN s.name              AS strategy,\n       s.approach           AS approach,\n       s.aum_usd_m          AS aum_usd_m,\n       p.gross_pnl_usd_m    AS gross_pnl_usd_m,\n       p.net_pnl_usd_m      AS net_pnl_usd_m,\n       p.sharpe             AS period_sharpe,\n       p.max_drawdown_pct   AS max_drawdown_pct\nORDER BY p.net_pnl_usd_m DESC",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 8,
+          "height": 4,
+          "x": 4,
+          "y": 6,
+          "type": "table",
+          "fields": [
+            "strategy",
+            "approach",
+            "aum_usd_m",
+            "gross_pnl_usd_m",
+            "net_pnl_usd_m",
+            "period_sharpe",
+            "max_drawdown_pct"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022956,
+          "schema": []
+        },
+        {
+          "id": "98124f83-b4a1-49f5-8994-c2b36a1b5818",
+          "title": "AUM per Strategy",
+          "query": "MATCH (s:Strategy)\nRETURN s.name     AS strategy,\n       //s.approach AS approach,\n       s.aum_usd_m AS aum_usd_m\nORDER BY s.aum_usd_m DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": true,
+          "width": 10,
+          "height": 4,
+          "x": 12,
+          "y": 0,
+          "type": "bar",
+          "fields": [
+            "strategy",
+            "aum_usd_m"
+          ],
+          "selection": {
+            "index": "strategy",
+            "value": "aum_usd_m",
+            "key": "(none)"
+          },
+          "settings": {
+            "labelRotation": 0
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582022956,
+          "schema": []
+        }
+      ]
+    },
+    {
+      "title": "Procurement & Renewals",
+      "reports": [
+        {
+          "id": "5c830896-27cf-4984-bf59-623017916a51",
+          "title": "Reference Date Selector",
+          "query": "RETURN true;",
+          "settingsOpen": false,
+          "advancedSettingsOpen": true,
+          "width": 6,
+          "height": 2,
+          "x": 0,
+          "y": 0,
+          "type": "select",
+          "fields": [],
+          "selection": {},
+          "settings": {
+            "type": "Date Picker",
+            "entityType": "today",
+            "parameterName": "neodash_today"
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582027617,
+          "schema": []
+        },
+        {
+          "id": "dc8c974e-d72c-4a0a-9468-bfe1c379f0e7",
+          "title": "Lookahead Window (days)",
+          "query": "RETURN coalesce(toInteger($input), 90)\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 6,
+          "height": 2,
+          "x": 0,
+          "y": 2,
+          "type": "select",
+          "fields": [
+            "coalesce(toInteger($input), 90)"
+          ],
+          "selection": {},
+          "settings": {
+            "type": "Custom Query",
+            "entityType": "days_horizon",
+            "parameterName": "neodash_days_horizon"
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582027617,
+          "schema": []
+        },
+        {
+          "id": "e99361f5-d091-406c-b2f3-e993b67d7fae",
+          "title": "Contracts renewing within the lookahead window, with ROI context and a recommendation.",
+          "query": "MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)\nWHERE date(prov.renewal_date) >= date($neodash_today)\n  AND date(prov.renewal_date) <= date($neodash_today) + duration({days: toInteger($neodash_days_horizon)})\n\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[:USED_IN]->(m:Model {status: 'Live'})\n               -[pw:POWERS]->(s:Strategy)\n               -[:PRODUCES]->(p:PnL)\nWHERE p.period = $neodash_pnl_period\n\nOPTIONAL MATCH (d)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)\n\nWITH v, d, prov,\n     coalesce(sum(DISTINCT pw.signal_weight * p.net_pnl_usd_m), 0) AS approx_pnl_exposure_m,\n     collect(DISTINCT m.name)   AS live_models,\n     collect(DISTINCT s.name)   AS live_strategies,\n     collect(DISTINCT alt.name) AS substitutes,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\n\nRETURN v.name                  AS vendor,\n       d.name                  AS dataset,\n       prov.renewal_date       AS renewal_date,\n       prov.notice_period_days AS notice_days,\n       prov.auto_renew         AS auto_renews,\n       prov.annual_fee_usd     AS annual_fee_usd,\n       tcdo_usd                AS total_cost_usd,\n       round(approx_pnl_exposure_m * 100) / 100 AS pnl_exposure_usd_m,\n       size(live_models)       AS live_model_count,\n       live_strategies,\n       CASE WHEN size(substitutes) > 0 THEN substitutes\n            ELSE ['None identified']\n       END                     AS available_substitutes,\n       CASE\n         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) = 0 THEN 'RENEW — critical, no substitute'\n         WHEN approx_pnl_exposure_m > 10 AND size(substitutes) > 0 THEN 'NEGOTIATE — high value, substitute exists'\n         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) > 0 THEN 'CONSIDER DROPPING — low ROI, substitute available'\n         WHEN approx_pnl_exposure_m < 2  AND size(substitutes) = 0 THEN 'REVIEW — low ROI, no substitute'\n         ELSE 'STANDARD RENEWAL'\n       END                     AS recommendation\nORDER BY date(prov.renewal_date)",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 12,
+          "height": 4,
+          "x": 6,
+          "y": 0,
+          "type": "table",
+          "fields": [
+            "vendor",
+            "dataset",
+            "renewal_date",
+            "notice_days",
+            "auto_renews",
+            "annual_fee_usd",
+            "total_cost_usd",
+            "pnl_exposure_usd_m",
+            "live_model_count",
+            "live_strategies",
+            "available_substitutes",
+            "recommendation"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582027617
+        },
+        {
+          "id": "8aaa3a53-9aa5-4144-8681-bab6a58dd812",
+          "title": "Top Datasets by Total Cost",
+          "query": "MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\nOPTIONAL MATCH (d)-[:SUBSTITUTABLE_FOR]->(alt:Dataset)\nWITH d, v, collect(alt.name) AS substitutes\nRETURN d.name                AS dataset,\n       v.name                AS vendor,\n       (d.annual_license_cost + d.ingestion_cost) AS total_cost_usd,\n       CASE WHEN size(substitutes) > 0 THEN 'Has substitute' ELSE 'No substitute' END AS has_substitute\nORDER BY total_cost_usd DESC\nLIMIT 15\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 6,
+          "height": 4,
+          "x": 0,
+          "y": 6,
+          "type": "table",
+          "fields": [
+            "dataset",
+            "vendor",
+            "total_cost_usd",
+            "has_substitute"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582027617
+        },
+        {
+          "id": "3579663b-5015-4290-a506-77870ab2ba9a",
+          "title": "PnL Period Selector",
+          "query": "\nMATCH (n:`PnL`)\nWHERE toLower(toString(n.`period`)) CONTAINS toLower($input)\nRETURN DISTINCT n.`period` AS value, n.`period` AS display\nORDER BY size(toString(value)) ASC\nLIMIT 5\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 6,
+          "height": 2,
+          "x": 0,
+          "y": 4,
+          "type": "select",
+          "fields": [
+            "value",
+            "display"
+          ],
+          "selection": {},
+          "settings": {
+            "type": "Node Property",
+            "entityType": "PnL",
+            "propertyType": "period",
+            "propertyTypeDisplay": "period",
+            "parameterName": "neodash_pnl_period"
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582027617,
+          "schema": []
+        },
+        {
+          "id": "15c230d9-90e4-42f1-b459-0123f1da14b5",
+          "title": "Auto-renew exposure",
+          "query": "MATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)\nWHERE prov.auto_renew = true\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[:USED_IN]->(m:Model)\nWHERE m.status = $neodash_model_status\nWITH v, d, prov, count(DISTINCT m) AS live_model_count\nRETURN v.name                 AS vendor,\n       d.name                 AS dataset,\n       prov.annual_fee_usd    AS annual_fee_usd,\n       prov.renewal_date      AS auto_renews_on,\n       prov.notice_period_days AS cancel_by_days_before,\n       live_model_count,\n       'Will auto-renew — confirm intent' AS action_required\nORDER BY prov.annual_fee_usd DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 12,
+          "height": 4,
+          "x": 6,
+          "y": 4,
+          "type": "table",
+          "fields": [
+            "vendor",
+            "dataset",
+            "annual_fee_usd",
+            "auto_renews_on",
+            "cancel_by_days_before",
+            "live_model_count",
+            "action_required"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582027617,
+          "schema": []
+        },
+        {
+          "id": "eb12c72c-85c1-4284-aefa-80794e94267c",
+          "title": "Dataset pairs where a cheaper substitute exists with meaningful signal overlap",
+          "query": "MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)\nWHERE sub.overlap_score >= 0.4\n  AND sub.cost_delta_usd >= 50000\nMATCH (v1:DataVendor)-[:PROVIDES]->(d)\nMATCH (v2:DataVendor)-[:PROVIDES]->(alt)\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(:Feature)\n               -[:USED_IN]->(m:Model {status: 'Live'})\nRETURN d.name                 AS current_dataset,\n       v1.name                AS current_vendor,\n       d.annual_license_cost  AS current_cost_usd,\n       alt.name               AS substitute_dataset,\n       v2.name                AS substitute_vendor,\n       alt.annual_license_cost AS substitute_cost_usd,\n       sub.cost_delta_usd     AS potential_saving_usd,\n       round(sub.overlap_score * 100) + '%' AS signal_overlap,\n       count(DISTINCT m)      AS live_models_at_risk,\n       CASE\n         WHEN sub.overlap_score >= 0.5 AND sub.cost_delta_usd > 100000 THEN 'Strong substitution candidate'\n         ELSE 'Worth evaluating'\n       END                    AS assessment\nORDER BY sub.cost_delta_usd DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 12,
+          "height": 4,
+          "x": 6,
+          "y": 8,
+          "type": "table",
+          "fields": [
+            "current_dataset",
+            "current_vendor",
+            "current_cost_usd",
+            "substitute_dataset",
+            "substitute_vendor",
+            "substitute_cost_usd",
+            "potential_saving_usd",
+            "signal_overlap",
+            "live_models_at_risk",
+            "assessment"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582027617
+        }
+      ]
+    },
+    {
+      "title": "ROI Attribution",
+      "reports": [
+        {
+          "id": "a8ac7cf0-758e-44f4-82cc-4b8fda454277",
+          "title": "Dataset ROI Leaderboard",
+          "query": "MATCH (d:Dataset)\n      -[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\n      -[pw:POWERS]->(s:Strategy)\n      -[:PRODUCES]->(p:PnL)\nWHERE m.status IN $neodash_model_status\n  AND p.period = $neodash_pnl_period\nWITH d,\n     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS attributed_pnl_usd_m,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\nRETURN d.name AS dataset,\n       round((attributed_pnl_usd_m * 1000000) / tcdo_usd * 10) / 10 AS roi_multiple\nORDER BY roi_multiple DESC\nLIMIT 12\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": true,
+          "width": 8,
+          "height": 5,
+          "x": 0,
+          "y": 0,
+          "type": "bar",
+          "fields": [
+            "dataset",
+            "roi_multiple"
+          ],
+          "selection": {
+            "key": "(none)",
+            "index": "dataset",
+            "value": "roi_multiple"
+          },
+          "settings": {
+            "marginBottom": 150,
+            "labelRotation": 70
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582039722,
+          "schema": []
+        },
+        {
+          "id": "fddcce54-fb59-4e54-8b2f-c6ca7207a1f7",
+          "title": "Full Dataset ROI Table",
+          "query": "MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[ui:USED_IN]->(m:Model)\n               -[pw:POWERS]->(s:Strategy)\n               -[:PRODUCES]->(p:PnL)\nWHERE m.status = $neodash_model_status\n  AND p.period = $neodash_pnl_period\nOPTIONAL MATCH (d)-[:SUBSTITUTABLE_FOR]->(alt:Dataset)\nWITH v, d,\n     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_m,\n     count(DISTINCT m) AS model_count,\n     collect(DISTINCT alt.name) AS substitutes,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\nRETURN v.name    AS vendor,\n       d.name    AS dataset,\n       d.category AS category,\n       tcdo_usd  AS annual_cost_usd,\n       round(attributed_pnl_m * 100) / 100 AS attributed_pnl_usd_m,\n       CASE WHEN tcdo_usd > 0\n            THEN round((attributed_pnl_m * 1000000) / tcdo_usd * 10) / 10\n            ELSE 0\n       END       AS roi_multiple,\n       model_count AS live_models_using,\n       CASE WHEN size(substitutes) > 0 THEN substitutes ELSE ['None'] END AS substitutes,\n       d.mnpi_risk_score AS mnpi_risk,\n       d.signal_half_life_days AS half_life_days\nORDER BY roi_multiple DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 14,
+          "height": 5,
+          "x": 8,
+          "y": 0,
+          "type": "table",
+          "fields": [
+            "vendor",
+            "dataset",
+            "category",
+            "annual_cost_usd",
+            "attributed_pnl_usd_m",
+            "roi_multiple",
+            "live_models_using",
+            "substitutes",
+            "mnpi_risk",
+            "half_life_days"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582039722
+        },
+        {
+          "id": "06964992-20d8-4728-b609-3222e6d41eb2",
+          "title": "Vendor ROI Summary",
+          "query": "MATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\n      -[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\n      -[pw:POWERS]->(s:Strategy)\n      -[:PRODUCES]->(p:PnL)\nWHERE m.status IN $neodash_model_status\n  AND p.period = $neodash_pnl_period\nWITH v,\n     sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m) AS total_pnl_m,\n     sum(DISTINCT (d.annual_license_cost + d.ingestion_cost))    AS total_spend,\n     count(DISTINCT d) AS datasets\nRETURN v.name  AS vendor,\n       v.tier  AS tier,\n       datasets,\n       total_spend AS annual_spend_usd,\n       round(total_pnl_m * 100) / 100 AS attributed_pnl_usd_m,\n       round((total_pnl_m * 1000000) / total_spend * 10) / 10 AS vendor_roi_multiple\nORDER BY vendor_roi_multiple DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 14,
+          "height": 4,
+          "x": 8,
+          "y": 5,
+          "type": "table",
+          "fields": [
+            "vendor",
+            "tier",
+            "datasets",
+            "annual_spend_usd",
+            "attributed_pnl_usd_m",
+            "vendor_roi_multiple"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582039722,
+          "schema": []
+        },
+        {
+          "id": "3687d677-10fa-4935-a30f-c693c62d4209",
+          "title": "Feature Shapley Attribution",
+          "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\nWHERE ui.in_production = true\n  AND m.status IN $neodash_model_status\nRETURN f.name         AS feature,\n       f.factor_type  AS factor_type,\n       d.name         AS source_dataset,\n       m.name         AS model,\n       ui.shapley_value AS shapley_value,\n       ui.importance_rank AS rank\nORDER BY ui.shapley_value DESC\nLIMIT 20\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 8,
+          "height": 4,
+          "x": 0,
+          "y": 5,
+          "type": "table",
+          "fields": [
+            "feature",
+            "factor_type",
+            "source_dataset",
+            "model",
+            "shapley_value",
+            "rank"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "source_dataset",
+                "value": "source_dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "source_dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582039722
+        },
+        {
+          "id": "a6ccabd7-6dfc-4bd6-8a45-93b535e4c83e",
+          "title": "Underperforming Dataset",
+          "query": "MATCH (d:Dataset)\nOPTIONAL MATCH (d)-[:FEEDS]->(:FeaturePipeline)\n               -[:GENERATES]->(f:Feature)\n               -[ui:USED_IN]->(m:Model {status: 'Live'})\n               -[pw:POWERS]->(s:Strategy)\n               -[:PRODUCES]->(p:PnL)\nWHERE p.period = $neodash_pnl_period\nWITH d,\n     coalesce(sum(ui.shapley_value * pw.signal_weight * p.net_pnl_usd_m), 0) AS attributed_pnl_m,\n     (d.annual_license_cost + d.ingestion_cost) AS tcdo_usd\nWHERE tcdo_usd >= 50000\n  AND attributed_pnl_m < 5.0\nRETURN d.name    AS dataset,\n       d.category AS category,\n       d.active  AS is_active,\n       tcdo_usd  AS annual_cost_usd,\n       round(attributed_pnl_m * 100) / 100 AS attributed_pnl_usd_m,\n       'Low ROI — review or drop' AS flag\nORDER BY tcdo_usd DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 14,
+          "height": 4,
+          "x": 8,
+          "y": 9,
+          "type": "table",
+          "fields": [
+            "dataset",
+            "category",
+            "is_active",
+            "annual_cost_usd",
+            "attributed_pnl_usd_m",
+            "flag"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582039723,
+          "schema": []
+        }
+      ]
+    },
+    {
+      "title": "Risk & Compliance",
+      "reports": [
+        {
+          "id": "758045c9-d1fc-49ba-9a1b-94090fde9cb2",
+          "title": "Datasets with MNPI Risk ≥ 0.5",
+          "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\nWHERE d.mnpi_risk_score >= 0.5\nRETURN count(DISTINCT d) AS High_MNPI_Datasets\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 5,
+          "height": 2,
+          "x": 0,
+          "y": 0,
+          "type": "value",
+          "fields": [
+            "High_MNPI_Datasets"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772581833120,
+          "schema": []
+        },
+        {
+          "id": "0dda7397-bf4f-4053-ad65-87661951869d",
+          "title": "AUM Exposed to High-MNPI Data",
+          "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\n      -[:POWERS]->(s:Strategy)\nWHERE d.mnpi_risk_score >= 0.5\nRETURN sum(DISTINCT s.aum_usd_m) AS AUM_Exposed_to_MNPI_USD_M\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 5,
+          "height": 2,
+          "x": 5,
+          "y": 0,
+          "type": "value",
+          "fields": [
+            "AUM_Exposed_to_MNPI_USD_M"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772581833121,
+          "schema": []
+        },
+        {
+          "id": "eacc57a8-8b4e-40e2-9a81-7bda25d69a63",
+          "title": "MNPI Risk Audit",
+          "query": "\nMATCH (v:DataVendor)-[:PROVIDES]->(d:Dataset)\n      -[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[:USED_IN]->(m:Model)\n      -[:POWERS]->(s:Strategy)\nWHERE d.mnpi_risk_score >= 0.5\n  AND m.status IN $neodash_model_status\nRETURN d.name                          AS dataset,\n       d.mnpi_risk_score               AS mnpi_risk_score,\n       v.name                          AS vendor,\n       collect(DISTINCT m.name)        AS models_using,\n       collect(DISTINCT s.name)        AS strategies_using,\n       sum(DISTINCT s.aum_usd_m)       AS total_aum_exposed_m,\n       'Compliance review required'    AS flag\nORDER BY d.mnpi_risk_score DESC\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 10,
+          "height": 4,
+          "x": 0,
+          "y": 2,
+          "type": "table",
+          "fields": [
+            "dataset",
+            "mnpi_risk_score",
+            "vendor",
+            "models_using",
+            "strategies_using",
+            "total_aum_exposed_m",
+            "flag"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": "auto",
+          "lastRunTimestamp": 1772581833121
+        },
+        {
+          "id": "7d3c7fa0-841f-4e0e-9b5a-ecd74eb77745",
+          "title": "Single Point of Failure",
+          "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(:Feature)\n      -[:USED_IN]->(m:Model)\nWHERE m.status IN $neodash_model_status\n  AND NOT EXISTS { MATCH (d)-[:SUBSTITUTABLE_FOR]->(:Dataset) }\nWITH d, collect(DISTINCT m.name) AS dependent_models\nRETURN d.name                AS dataset,\n       d.category            AS category,\n       d.annual_license_cost AS license_cost_usd,\n       d.mnpi_risk_score     AS mnpi_risk,\n       dependent_models,\n       size(dependent_models) AS model_count,\n       'No substitute identified' AS risk_flag\nORDER BY d.annual_license_cost DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 10,
+          "height": 5,
+          "x": 0,
+          "y": 6,
+          "type": "table",
+          "fields": [
+            "dataset",
+            "category",
+            "license_cost_usd",
+            "mnpi_risk",
+            "dependent_models",
+            "model_count",
+            "risk_flag"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": "auto",
+          "lastRunTimestamp": 1772581833121
+        },
+        {
+          "id": "7e68def3-57c1-4912-a127-63a7518c14bc",
+          "title": "Correlated Feature Pairs -- potential duplicate signal spend",
+          "query": "\nMATCH (f1:Feature)-[c:CORRELATED_WITH]->(f2:Feature)\nWHERE c.r_squared > 0.45\nMATCH (d1:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f1)\nMATCH (d2:Dataset)-[:FEEDS]->(:FeaturePipeline)-[:GENERATES]->(f2)\nMATCH (m:Model {status: 'Live'})\nWHERE (f1)-[:USED_IN]->(m) AND (f2)-[:USED_IN]->(m)\nRETURN m.name    AS model,\n       f1.name   AS feature_1,\n       f2.name   AS feature_2,\n       round(c.r_squared * 100) + '%' AS r_squared,\n       d1.name   AS source_dataset_1,\n       d2.name   AS source_dataset_2,\n       CASE WHEN d1.name = d2.name\n            THEN 'Same dataset — definite overlap'\n            ELSE 'Different datasets — potential redundancy'\n       END       AS redundancy_type,\n       c.detected_date AS detected\nORDER BY c.r_squared DESC\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 10,
+          "height": 4,
+          "x": 10,
+          "y": 0,
+          "type": "table",
+          "fields": [
+            "model",
+            "feature_1",
+            "feature_2",
+            "r_squared",
+            "source_dataset_1",
+            "source_dataset_2",
+            "redundancy_type",
+            "detected"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "source_dataset_1",
+                "value": "source_dataset_1",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "source_dataset_2",
+                "value": "source_dataset_2",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "source_dataset_1",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              },
+              {
+                "condition": "Click",
+                "field": "source_dataset_2",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772581833121
+        },
+        {
+          "id": "84444219-fe5a-440b-9cdb-45c60fcae58e",
+          "title": "Alpha Decay Watch -- highest risk of alpha crowding",
+          "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[:USED_IN]->(m:Model {status: 'Live'})\n      -[:POWERS]->(s:Strategy)\nWHERE d.signal_half_life_days <= 30\nRETURN d.name                    AS dataset,\n       d.signal_half_life_days   AS half_life_days,\n       d.annual_license_cost     AS license_cost_usd,\n       collect(DISTINCT m.name)  AS live_models,\n       collect(DISTINCT s.name)  AS live_strategies,\n       'Short half-life — monitor alpha decay' AS warning\nORDER BY d.signal_half_life_days\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 10,
+          "height": 4,
+          "x": 10,
+          "y": 4,
+          "type": "table",
+          "fields": [
+            "dataset",
+            "half_life_days",
+            "license_cost_usd",
+            "live_models",
+            "live_strategies",
+            "warning"
+          ],
+          "selection": {},
+          "settings": {
+            "actionsRules": [
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "dataset",
+                "customization": "set variable",
+                "customizationValue": "dataset_name"
+              },
+              {
+                "condition": "Click",
+                "field": "dataset",
+                "value": "4/Dataset Drill-down",
+                "customization": "set page",
+                "customizationValue": ""
+              }
+            ]
+          },
+          "collapseTimeout": "auto",
+          "lastRunTimestamp": 1772581833121
+        }
+      ]
+    },
+    {
+      "title": "Dataset Drill-down",
+      "reports": [
+        {
+          "id": "ef5c8413-bff9-4abe-b811-07fe736efa22",
+          "title": "Dataset Profile",
+          "query": "\nMATCH (v:DataVendor)-[prov:PROVIDES]->(d:Dataset)\nWHERE d.name = $neodash_dataset_name\nRETURN d.name                  AS dataset,\n       v.name                  AS vendor,\n       v.tier                  AS vendor_tier,\n       d.category              AS category,\n       d.asset_class_coverage  AS asset_class,\n       d.annual_license_cost   AS license_cost_usd,\n       d.ingestion_cost        AS ingestion_cost_usd,\n       (d.annual_license_cost + d.ingestion_cost) AS total_cost_usd,\n       d.mnpi_risk_score       AS mnpi_risk,\n       d.signal_half_life_days AS half_life_days,\n       d.refresh_frequency     AS refresh,\n       prov.renewal_date       AS renewal_date,\n       prov.auto_renew         AS auto_renews,\n       prov.notice_period_days AS notice_days,\n       prov.annual_fee_usd     AS contracted_fee_usd,\n       d.active                AS active\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 16,
+          "height": 2,
+          "x": 0,
+          "y": 0,
+          "type": "table",
+          "fields": [
+            "dataset",
+            "vendor",
+            "vendor_tier",
+            "category",
+            "asset_class",
+            "license_cost_usd",
+            "ingestion_cost_usd",
+            "total_cost_usd",
+            "mnpi_risk",
+            "half_life_days",
+            "refresh",
+            "renewal_date",
+            "auto_renews",
+            "notice_days",
+            "contracted_fee_usd",
+            "active"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582071471
+        },
+        {
+          "id": "1bc4302e-3512-4ab4-a974-31aa60f03a00",
+          "title": "Full Lineage Graph",
+          "query": "MATCH path = (d:Dataset)-[:FEEDS]->(fp:FeaturePipeline)\n             -[:GENERATES]->(f:Feature)\n             -[:USED_IN]->(m:Model)\n             -[:POWERS]->(s:Strategy)\n             -[:PRODUCES]->(p:PnL)\nWHERE d.name = $neodash_dataset_name\n  AND p.period = $neodash_pnl_period\nRETURN path\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 9,
+          "height": 7,
+          "x": 0,
+          "y": 2,
+          "type": "graph",
+          "fields": [
+            [
+              "Dataset",
+              "signal_half_life_days",
+              "refresh_frequency",
+              "vendor_id",
+              "coverage_start_year",
+              "name",
+              "mnpi_risk_score",
+              "active",
+              "id",
+              "annual_license_cost",
+              "category",
+              "ingestion_cost",
+              "asset_class_coverage"
+            ],
+            [
+              "FeaturePipeline",
+              "team_owner",
+              "name",
+              "language",
+              "id",
+              "compute_cost_annual"
+            ],
+            [
+              "Feature",
+              "is_proprietary",
+              "factor_type",
+              "lookback_days",
+              "name",
+              "id",
+              "coverage_universe"
+            ],
+            [
+              "Model",
+              "inception_year",
+              "asset_class",
+              "name",
+              "model_type",
+              "backtest_sharpe",
+              "id",
+              "live_sharpe",
+              "status"
+            ],
+            [
+              "Strategy",
+              "inception_year",
+              "asset_class",
+              "target_sharpe",
+              "name",
+              "id",
+              "approach",
+              "aum_usd_m"
+            ],
+            [
+              "PnL",
+              "period",
+              "gross_pnl_usd_m",
+              "max_drawdown_pct",
+              "id",
+              "net_pnl_usd_m",
+              "sharpe"
+            ]
+          ],
+          "selection": {
+            "Dataset": "name",
+            "FeaturePipeline": "name",
+            "Feature": "name",
+            "Model": "name",
+            "Strategy": "name",
+            "PnL": "id"
+          },
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582071471,
+          "schema": [
+            [
+              "Dataset",
+              "signal_half_life_days",
+              "refresh_frequency",
+              "vendor_id",
+              "coverage_start_year",
+              "name",
+              "mnpi_risk_score",
+              "active",
+              "id",
+              "annual_license_cost",
+              "category",
+              "ingestion_cost",
+              "asset_class_coverage"
+            ],
+            [
+              "FeaturePipeline",
+              "team_owner",
+              "name",
+              "language",
+              "id",
+              "compute_cost_annual"
+            ],
+            [
+              "Feature",
+              "is_proprietary",
+              "factor_type",
+              "lookback_days",
+              "name",
+              "id",
+              "coverage_universe"
+            ],
+            [
+              "Model",
+              "inception_year",
+              "asset_class",
+              "name",
+              "model_type",
+              "backtest_sharpe",
+              "id",
+              "live_sharpe",
+              "status"
+            ],
+            [
+              "Strategy",
+              "inception_year",
+              "asset_class",
+              "target_sharpe",
+              "name",
+              "id",
+              "approach",
+              "aum_usd_m"
+            ],
+            [
+              "PnL",
+              "period",
+              "gross_pnl_usd_m",
+              "max_drawdown_pct",
+              "id",
+              "net_pnl_usd_m",
+              "sharpe"
+            ]
+          ]
+        },
+        {
+          "id": "8026b4fd-c113-4409-b557-918422d37a6c",
+          "title": "Blast Radius",
+          "query": "MATCH (d:Dataset)-[:FEEDS]->(fp:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[:USED_IN]->(m:Model)\n      -[:POWERS]->(s:Strategy)\nWHERE d.name = $neodash_dataset_name\n  AND m.status IN $neodash_model_status\nRETURN d.name                      AS at_risk_dataset,\n       collect(DISTINCT fp.name)   AS affected_pipelines,\n       collect(DISTINCT f.name)    AS affected_features,\n       collect(DISTINCT m.name)    AS affected_models,\n       collect(DISTINCT s.name)    AS affected_strategies,\n       count(DISTINCT s)           AS strategy_count\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 7,
+          "height": 3,
+          "x": 9,
+          "y": 2,
+          "type": "table",
+          "fields": [
+            "at_risk_dataset",
+            "affected_pipelines",
+            "affected_features",
+            "affected_models",
+            "affected_strategies",
+            "strategy_count"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582071471
+        },
+        {
+          "id": "3cbb60c8-9c6f-462e-a37b-ee70b7e8a437",
+          "title": "Feature Attribution",
+          "query": "MATCH (d:Dataset)-[:FEEDS]->(:FeaturePipeline)\n      -[:GENERATES]->(f:Feature)\n      -[ui:USED_IN]->(m:Model)\nWHERE d.name = $neodash_dataset_name\n  AND ui.in_production = true\n  AND m.status IN $neodash_model_status\nRETURN f.name          AS feature,\n       f.factor_type   AS factor_type,\n       m.name          AS model,\n       ui.shapley_value AS shapley_value,\n       ui.importance_rank AS rank\nORDER BY ui.shapley_value DESC\n\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 7,
+          "height": 4,
+          "x": 9,
+          "y": 5,
+          "type": "table",
+          "fields": [
+            "feature",
+            "factor_type",
+            "model",
+            "shapley_value",
+            "rank"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582071471
+        },
+        {
+          "id": "9e63d03d-f8ae-4192-bfb2-279717e61410",
+          "title": "Alternative datasets",
+          "query": "MATCH (d:Dataset)-[sub:SUBSTITUTABLE_FOR]->(alt:Dataset)\nWHERE d.name = $neodash_dataset_name\nMATCH (v2:DataVendor)-[:PROVIDES]->(alt)\nRETURN alt.name                AS substitute_dataset,\n       v2.name                 AS substitute_vendor,\n       alt.annual_license_cost AS substitute_cost_usd,\n       sub.cost_delta_usd      AS potential_saving_usd,\n       round(sub.overlap_score * 100) + '%' AS signal_overlap,\n       CASE\n         WHEN sub.overlap_score >= 0.5 AND sub.cost_delta_usd > 100000\n              THEN 'Strong candidate'\n         ELSE 'Worth evaluating'\n       END                     AS assessment\nORDER BY sub.overlap_score DESC\n\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": false,
+          "width": 6,
+          "height": 4,
+          "x": 16,
+          "y": 2,
+          "type": "table",
+          "fields": [
+            "substitute_dataset",
+            "substitute_vendor",
+            "substitute_cost_usd",
+            "potential_saving_usd",
+            "signal_overlap",
+            "assessment"
+          ],
+          "selection": {},
+          "settings": {},
+          "collapseTimeout": 0,
+          "lastRunTimestamp": 1772582071471
+        },
+        {
+          "id": "a7e74518-971d-4234-9cd8-b7af630999f6",
+          "title": "Select Dataset",
+          "query": "\nMATCH (n:`Dataset`)\nWHERE toLower(toString(n.`name`)) CONTAINS toLower($input)\nRETURN DISTINCT n.`name` AS value, n.`name` AS display\nORDER BY size(toString(value)) ASC\nLIMIT 5\n",
+          "settingsOpen": false,
+          "advancedSettingsOpen": true,
+          "width": 6,
+          "height": 2,
+          "x": 16,
+          "y": 0,
+          "type": "select",
+          "fields": [
+            "value",
+            "display"
+          ],
+          "selection": {},
+          "settings": {
+            "type": "Node Property",
+            "entityType": "Dataset",
+            "propertyType": "name",
+            "propertyTypeDisplay": "name",
+            "parameterName": "neodash_dataset_name"
+          },
+          "collapseTimeout": "auto",
+          "lastRunTimestamp": 1772582065229,
+          "schema": []
+        }
+      ]
+    }
+  ],
+  "parameters": {},
+  "extensions": {
+    "active": true,
+    "activeReducers": [],
+    "advanced-charts": {
+      "active": true
+    },
+    "query-translator": {},
+    "access-control-management": {}
+  },
+  "loadedAt": null
+}

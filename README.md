@@ -65,7 +65,8 @@ neo4j-data-asset-intelligence/
 ├── data-model/
 │   └── SCHEMA.md                   ← Node & relationship definitions
 ├── data/
-│   └── seed.ipynb                  ← Jupyter notebook: loads synthetic data into Neo4j
+│   ├── seed.ipynb                  ← Jupyter notebook: loads synthetic data into Neo4j
+│   └── neo4j-aura-backup.backup    ← Aura database backup (includes NeoDash dashboard node)
 ├── queries/
 │   ├── 01_lineage_impact.cypher    ← Angle 1: dependency & impact analysis
 │   ├── 02_roi_scoring.cypher       ← Angle 2: dataset ROI attribution
@@ -74,6 +75,9 @@ neo4j-data-asset-intelligence/
 │   ├── BLOOM_GUIDE.md              ← Perspective config, search phrases & scene actions
 │   ├── BLOOM_DEMO_FLOW.md          ← Step-by-step demo script for Bloom
 │   └── data asset intel perspective.json  ← Importable Bloom perspective file
+├── dashboard/
+│   ├── DASHBOARD_GUIDE.md          ← NeoDash pages, reports & copy-paste Cypher
+│   └── dashboard.json              ← Importable NeoDash dashboard file
 └── agent/
     └── AGENT_PROMPTS.md            ← Aura Agent system prompt & example interactions
 ```
@@ -86,14 +90,20 @@ neo4j-data-asset-intelligence/
 - A running **Neo4j AuraDB** instance (or local Neo4j 5.x)
 - Python 3.9+ with `neo4j`, `pandas`, `faker` installed
 - Neo4j Bloom (available in Aura Console)
+- [NeoDash](https://neodash.graphapp.io) (open source, runs in browser — connect to your AuraDB instance)
 
-### Steps
+### Option A — Restore from backup *(fastest)*
 1. Clone this repo
-2. Open `data/seed.ipynb` in Jupyter
-3. Set your AuraDB connection credentials in the first cell
-4. Run all cells to load the synthetic dataset
-5. Open Bloom and import `bloom/data asset intel perspective.json` — then follow `bloom/BLOOM_DEMO_FLOW.md`
-6. Run the Cypher queries in `queries/` from the Aura Console or Neo4j Browser
+2. In the Aura Console, restore `data/neo4j-aura-backup.backup` to your instance — graph data **and** the NeoDash dashboard are included
+3. Open NeoDash and connect to your instance — the dashboard loads automatically
+4. Open Bloom and import `bloom/data asset intel perspective.json` — then follow `bloom/BLOOM_DEMO_FLOW.md`
+
+### Option B — Fresh seed
+1. Clone this repo
+2. Open `data/seed.ipynb` in Jupyter, set your AuraDB credentials in the first cell, and run all cells to load the synthetic dataset
+3. Open NeoDash, connect to your instance, and load `dashboard/dashboard.json` via *Load dashboard* — refer to `dashboard/DASHBOARD_GUIDE.md` for report details
+4. Open Bloom and import `bloom/data asset intel perspective.json` — then follow `bloom/BLOOM_DEMO_FLOW.md`
+5. Run the Cypher queries in `queries/` from the Aura Console or Neo4j Browser
 
 ---
 
