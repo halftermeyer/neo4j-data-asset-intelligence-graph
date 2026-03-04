@@ -75,11 +75,9 @@ neo4j-data-asset-intelligence/
 │   ├── BLOOM_GUIDE.md              ← Perspective config, search phrases & scene actions
 │   ├── BLOOM_DEMO_FLOW.md          ← Step-by-step demo script for Bloom
 │   └── data asset intel perspective.json  ← Importable Bloom perspective file
-├── dashboard/
-│   ├── DASHBOARD_GUIDE.md          ← NeoDash pages, reports & copy-paste Cypher
-│   └── dashboard.json              ← Importable NeoDash dashboard file
-└── agent/
-    └── AGENT_PROMPTS.md            ← Aura Agent system prompt & example interactions
+└── dashboard/
+    ├── DASHBOARD_GUIDE.md          ← NeoDash pages, reports & copy-paste Cypher
+    └── dashboard.json              ← Importable NeoDash dashboard file
 ```
 
 ---
